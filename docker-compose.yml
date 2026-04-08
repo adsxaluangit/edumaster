@@ -18,8 +18,8 @@ services:
 
   backend:
     build:
-      context: ./edumaster-backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.backend
     container_name: edumaster_backend
     restart: always
     environment:
@@ -51,8 +51,8 @@ services:
 
   frontend:
     build:
-      context: ./edumaster-frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.frontend
     container_name: edumaster_frontend
     restart: always
     ports:
@@ -66,7 +66,6 @@ volumes:
   edumaster_db_data:
     name: github_edumaster_db_data
     external: true
-
 
 networks:
   edumaster_net:
