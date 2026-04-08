@@ -1910,10 +1910,11 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
 
       // Title
       worksheet.mergeCells('A4:F4');
-      worksheet.getCell('A4').value = `BẢNG KÊ NỘP KINH PHÍ ĐÀO TẠO LỚP: ${formData.className || '..................'} KHOÁ: ${formData.trainingCourse || '..................'}`;
+      const classNameUpper = (formData.className || '..................').toUpperCase();
+      worksheet.getCell('A4').value = `BẢNG KÊ NỘP KINH PHÍ ĐÀO TẠO\nLỚP: ${classNameUpper} - KHOÁ: ${formData.trainingCourse || '..................'}`;
       worksheet.getCell('A4').font = { name: 'Times New Roman', size: 14, bold: true };
-      worksheet.getCell('A4').alignment = { horizontal: 'center', vertical: 'middle' };
-      worksheet.getRow(4).height = 30;
+      worksheet.getCell('A4').alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      worksheet.getRow(4).height = 45;
 
       // Columns Config
       worksheet.columns = [
@@ -1939,9 +1940,24 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       });
 
       // Data Rows
+      const sortedStudents = [...tempStudents].filter(s => s.fullName && s.fullName.trim() !== '').sort((a, b) => {
+        const getParts = (name: string) => {
+          const parts = (name || '').trim().split(/\s+/);
+          const first = parts.length > 1 ? (parts.pop() || '') : (parts[0] || '');
+          const last = parts.join(' ');
+          return { first: first.toLowerCase(), last: last.toLowerCase() };
+        };
+        const nameA = getParts(a.fullName);
+        const nameB = getParts(b.fullName);
+        return (
+          nameA.first.localeCompare(nameB.first, 'vi', { sensitivity: 'base' }) ||
+          nameA.last.localeCompare(nameB.last, 'vi', { sensitivity: 'base' })
+        );
+      });
+
       let currentRow = 6;
-      for (let i = 0; i < tempStudents.length; i++) {
-        const s = tempStudents[i];
+      for (let i = 0; i < sortedStudents.length; i++) {
+        const s = sortedStudents[i];
         const row = worksheet.getRow(currentRow);
         row.height = 25;
         row.getCell(1).value = i + 1;

@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { FileSpreadsheet, RefreshCw, Trash2, Plus, Search, Filter, ChevronDown, X, Camera, Save, Calendar, User, Upload, Check, Phone, MapPin, Briefcase, Flag, School, Edit3, Image as ImageIcon, FileText, CheckCircle2, XCircle, ShieldCheck } from 'lucide-react';
+import { FileSpreadsheet, RefreshCw, Trash2, Plus, Search, Filter, ChevronDown, X, Camera, Save, Calendar, User, Upload, Check, Phone, MapPin, Briefcase, Flag, School, Edit3, Image as ImageIcon, FileText, CheckCircle2, XCircle, ShieldCheck, Printer } from 'lucide-react';
 import { Student } from '../types';
 import { MOCK_STUDENTS, MOCK_NATIONS, MOCK_CLASSES } from '../mockData';
 import { fetchCategory, createCategory, updateCategory, deleteCategory, COLLECTIONS } from '../services/api';
@@ -588,8 +588,210 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         }
         return s;
       }));
-      alert("Lỗi khi cập nhật trạng thái duyệt!");
     }
+  };
+
+  const handlePrintRegistrationCard = () => {
+    const { fullName, dob, pob, idNumber, ethnicity, nationality, phone, address, group } = formData;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert("Vui lòng cho phép Pop-ups trên trình duyệt để in phiếu.");
+      return;
+    }
+
+    // Format DOB correctly to DD/MM/YYYY
+    let formattedDob = dob;
+    if (dob && dob.includes(',')) {
+      formattedDob = dob.replace(/,/g, '/');
+    }
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+      <meta charset="UTF-8">
+      <title>Phiếu đăng ký học</title>
+      <style>
+        @page {
+            size: A5 portrait;
+            margin: 0;
+        }
+        body {
+          font-family: 'Times New Roman', Times, serif;
+          font-size: 12pt;
+          line-height: 1.25;
+          margin: 0;
+          padding: 1.5cm 1.5cm 1.5cm 2cm;
+          box-sizing: border-box;
+          background-color: #fff;
+          color: #000;
+        }
+        .container {
+          display: block;
+        }
+        .header-right {
+          float: right;
+          width: 3cm;
+          height: 4cm;
+          border: 1px solid #777;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: red;
+          font-size: 10pt;
+          overflow: hidden;
+          margin-left: 15px;
+          margin-bottom: 10px;
+        }
+        .header-right img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .header-left {
+          text-align: center;
+          font-size: 10pt;
+          margin-bottom: 15px;
+        }
+        .header-left .agency {
+          text-transform: uppercase;
+        }
+        .header-left .school {
+          text-transform: uppercase;
+          font-weight: bold;
+        }
+        .title {
+          text-align: center;
+          font-weight: bold;
+          font-size: 14pt;
+          margin: 0 0 15px 0;
+          text-transform: uppercase;
+        }
+        .info-row {
+          display: flex;
+          margin-bottom: 4px;
+        }
+        .info-row .label {
+          white-space: nowrap;
+          min-width: fit-content;
+        }
+        .info-row .value {
+          flex: 1;
+          margin-left: 5px;
+          margin-right: 5px;
+          display: flex;
+          align-items: flex-end;
+          padding-bottom: 2px;
+        }
+        .row-group-flex {
+          display: flex;
+          width: 100%;
+          margin-bottom: 4px;
+        }
+        .row-group-flex .left {
+          flex: 1.2;
+          display: flex;
+        }
+        .row-group-flex .right {
+          flex: 0.8;
+          display: flex;
+        }
+        .content {
+          margin-bottom: 10px;
+        }
+        .signature-section {
+          display: flex;
+          justify-content: flex-end;
+          margin-top: 5px;
+        }
+        .signature-box {
+          text-align: center;
+          width: 6cm;
+        }
+        .signature-box .role {
+          font-style: italic;
+        }
+        @media print {
+            body {
+                padding-top: 1.5cm;
+                padding-left: 2cm;
+                padding-right: 1.5cm;
+            }
+        }
+      </style>
+    </head>
+    <body onload="window.print()">
+      <div class="container">
+        <div class="header-right">
+          ${studentPhoto ? `<img src="${studentPhoto}" alt="Ảnh 3x4" />` : 'Ảnh 3x4'}
+        </div>
+        
+        <div class="header-left">
+          <div class="agency">CỤC HÀNG HẢI VÀ ĐƯỜNG THUỶ VIỆT NAM</div>
+          <div class="school">TRƯỜNG CAO ĐẲNG HÀNG HẢI VÀ ĐƯỜNG THUỶ I</div>
+        </div>
+
+        <div class="title">PHIẾU ĐĂNG KÝ HỌC</div>
+
+        <div class="content">
+          <div class="info-row">
+            <span class="label">Họ và tên :</span>
+            <span class="value"><b>${fullName.toUpperCase()}</b></span>
+          </div>
+          <div class="info-row">
+            <span class="label">Ngày, tháng, năm sinh:</span>
+            <span class="value">${formattedDob}</span>
+          </div>
+          <div class="row-group-flex">
+            <div class="left">
+              <span class="label">Nơi sinh:</span>
+              <span class="value">${pob}</span>
+            </div>
+            <div class="right">
+              <span class="label">Số CCCD :</span>
+              <span class="value">${idNumber}</span>
+            </div>
+          </div>
+          <div class="row-group-flex">
+            <div class="left">
+              <span class="label">Dân tộc :</span>
+              <span class="value">${ethnicity}</span>
+            </div>
+            <div class="right">
+              <span class="label">Quốc tịch:</span>
+              <span class="value">${nationality}</span>
+            </div>
+          </div>
+          <div class="info-row">
+            <span class="label">Số điện thoại liên lạc:</span>
+            <span class="value">${phone}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Đơn vị công tác:</span>
+            <span class="value"></span>
+          </div>
+          <div class="info-row">
+            <span class="label">Địa chỉ thường trú:</span>
+            <span class="value">${address}</span>
+          </div>
+          <div class="info-row" style="margin-top: 4px;">
+            <span class="label">Đăng ký học:</span>
+            <span class="value">${group}</span>
+          </div>
+        </div>
+
+        <div class="signature-section">
+          <div class="signature-box">
+            <div class="role">Học viên (ký và ghi rõ họ tên)</div>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
   };
 
   const renderStudentForm = () => (
@@ -601,8 +803,9 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         </div>
 
         <div className="p-2 border-b border-slate-200 bg-slate-50 flex justify-end gap-2">
+          <button onClick={handlePrintRegistrationCard} className="px-5 py-1 bg-white text-blue-600 rounded border border-blue-300 text-[12px] font-bold shadow-sm hover:bg-blue-50 flex items-center gap-1.5 transition-colors"><Printer size={14} /> In Phiếu ĐK Học</button>
           <button onClick={handleSave} className="px-5 py-1 bg-[#54a0ff] text-white rounded border border-[#2e86de] text-[12px] font-bold shadow-sm hover:brightness-105 flex items-center gap-1.5"><Save size={14} /> Lưu</button>
-          <button onClick={() => { stopCamera(); setIsFormOpen(false); }} className="px-5 py-1 bg-white text-slate-700 rounded border border-slate-300 text-[12px] font-bold shadow-sm">Đóng</button>
+          <button onClick={() => { stopCamera(); setIsFormOpen(false); }} className="px-5 py-1 bg-white text-slate-700 rounded border border-slate-300 text-[12px] font-bold shadow-sm outline-none hover:bg-slate-100 transition-colors">Đóng</button>
         </div>
 
         <div className="p-6 bg-white overflow-y-auto max-h-[80vh]">

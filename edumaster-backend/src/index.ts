@@ -57,7 +57,8 @@ export default {
                     'api::supplier.supplier.find', 'api::supplier.supplier.findOne', 'api::supplier.supplier.create', 'api::supplier.supplier.update', 'api::supplier.supplier.delete',
                     'api::print-template.print-template.find', 'api::print-template.print-template.findOne', 'api::print-template.print-template.create', 'api::print-template.print-template.update', 'api::print-template.print-template.delete',
                     'api::audit-log.audit-log.find', 'api::audit-log.audit-log.findOne', 'api::audit-log.audit-log.create',
-                    'plugin::users-permissions.user.me'
+                    'plugin::users-permissions.user.me',
+                    'plugin::users-permissions.user.find', 'plugin::users-permissions.user.findOne', 'plugin::users-permissions.user.create', 'plugin::users-permissions.user.update', 'plugin::users-permissions.user.destroy', 'plugin::users-permissions.role.find'
                 ];
 
                 for (const action of actionsToGrant) {
