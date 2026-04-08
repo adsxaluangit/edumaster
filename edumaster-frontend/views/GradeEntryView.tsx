@@ -329,20 +329,20 @@ const GradeEntryView: React.FC = () => {
             <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                 <div className="bg-white w-full max-w-6xl rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-300">
                     {/* Header */}
-                    <div className="bg-slate-800 text-white px-6 py-4 flex justify-between items-center shrink-0">
-                        <div className="flex items-center gap-4">
-                            <div className="p-2 bg-slate-700 rounded-lg"><Calculator size={24} className="text-green-400" /></div>
+                    <div className="bg-slate-800 text-white px-4 py-3 flex justify-between items-center shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="p-1.5 bg-slate-700 rounded-md"><Calculator size={18} className="text-green-400" /></div>
                             <div>
-                                <h2 className="text-xl font-bold">{selectedDecision.className}</h2>
-                                <p className="text-sm text-slate-300">Nhập điểm thi kết thúc môn</p>
+                                <h2 className="text-[15px] font-bold">{selectedDecision.className}</h2>
+                                <p className="text-[12px] text-slate-300 mt-0.5">Nhập điểm thi kết thúc môn</p>
                             </div>
                         </div>
-                        <div className="flex gap-2">
-                            <button onClick={handleSaveGrades} className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg flex items-center gap-2 hover:bg-green-700 shadow-lg shadow-green-900/50">
-                                <Save size={18} /> Lưu Bảng Điểm
+                        <div className="flex items-center gap-2">
+                            <button onClick={handleSaveGrades} className="px-3 py-1.5 bg-green-600 text-white text-[13px] font-semibold rounded-md flex items-center gap-1.5 hover:bg-green-700 shadow-sm shadow-green-900/50">
+                                <Save size={15} /> Lưu Bảng Điểm
                             </button>
-                            <div className="w-px h-8 bg-slate-700 mx-2"></div>
-                            <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white"><X size={24} /></button>
+                            <div className="w-px h-6 bg-slate-600 mx-1"></div>
+                            <button onClick={() => setIsModalOpen(false)} className="p-1.5 hover:bg-slate-700 rounded-md text-slate-400 hover:text-white"><X size={20} /></button>
                         </div>
                     </div>
 
@@ -353,10 +353,10 @@ const GradeEntryView: React.FC = () => {
                                 <div
                                     key={sub.id}
                                     onClick={() => setSelectedSubjectId(sub.id)}
-                                    className={`p-3 rounded-lg cursor-pointer mb-2 border transition-all ${String(selectedSubjectId) === String(sub.id) ? 'bg-white border-green-500 shadow-md ring-1 ring-green-500' : 'bg-white border-slate-200 hover:border-green-300'}`}
+                                    className={`p-2.5 rounded-lg cursor-pointer mb-1.5 border transition-all ${String(selectedSubjectId) === String(sub.id) ? 'bg-white border-green-500 shadow-sm ring-1 ring-green-500' : 'bg-white border-slate-200 hover:border-green-300'}`}
                                 >
-                                    <div className="font-bold text-slate-800 text-sm">{sub.name}</div>
-                                    <div className="text-xs text-slate-500 mt-1">{sub.code}</div>
+                                    <div className="font-semibold text-slate-800 text-[13px] leading-snug">{sub.name}</div>
+                                    <div className="text-[11px] text-slate-500 mt-0.5">{sub.code}</div>
                                 </div>
                             ))}
                         </div>
@@ -365,35 +365,35 @@ const GradeEntryView: React.FC = () => {
                         <div className="flex-1 bg-white overflow-y-auto p-0 relative">
                             {!selectedSubjectId ? (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 bg-slate-50/50">
-                                    <BookOpen size={48} className="mb-4 opacity-50" />
-                                    <p>Chọn môn học để nhập điểm</p>
+                                    <BookOpen size={32} className="mb-3 opacity-50" />
+                                    <p className="text-[15px] font-medium text-slate-600">Chọn môn học để nhập điểm</p>
                                 </div>
                             ) : (
                                 <div className="h-full flex flex-col">
-                                    <div className="px-6 py-4 border-b bg-white sticky top-0 z-10 flex justify-between items-center">
-                                        <h3 className="font-bold text-lg flex items-center gap-2">
-                                            <BookOpen size={20} className="text-green-600" />
+                                    <div className="px-5 py-3 border-b bg-white sticky top-0 z-10 flex justify-between items-center">
+                                        <h3 className="font-bold text-[15px] flex items-center gap-2">
+                                            <BookOpen size={16} className="text-green-600" />
                                             {decisionSubjects.find(s => s.id === selectedSubjectId)?.name}
                                         </h3>
-                                        <div className="text-sm font-bold text-slate-500">
+                                        <div className="text-[12px] font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-md border border-slate-200">
                                             Sĩ số: {decisionStudents.length}
                                         </div>
                                     </div>
                                     <div className="flex-1 overflow-auto">
-                                        <table className="w-full text-sm text-left">
-                                            <thead className="bg-slate-50 text-slate-500 font-bold text-xs uppercase sticky top-0 z-0 shadow-sm border-b border-slate-200">
+                                        <table className="w-full text-[13px] text-left">
+                                            <thead className="bg-slate-50 text-slate-500 font-bold text-[11px] uppercase sticky top-0 z-0 shadow-sm border-b border-slate-200">
                                                 <tr>
-                                                    <th className="px-4 py-3 w-12 text-center bg-slate-50">STT</th>
-                                                    <th className="px-4 py-3 bg-slate-50">Mã HV</th>
-                                                    <th className="px-4 py-3 bg-slate-50">Họ và tên</th>
-                                                    <th className="px-4 py-3 text-center bg-slate-50">Trạng thái</th>
+                                                    <th className="px-4 py-2.5 w-12 text-center bg-slate-50">STT</th>
+                                                    <th className="px-4 py-2.5 bg-slate-50">Mã HV</th>
+                                                    <th className="px-4 py-2.5 bg-slate-50">Họ và tên</th>
+                                                    <th className="px-4 py-2.5 text-center bg-slate-50">Trạng thái</th>
                                                     {decisionSubjects.find(s => s.id === selectedSubjectId)?.hasTheory && (
-                                                        <th className="px-4 py-3 w-32 text-center bg-slate-50">Lý thuyết</th>
+                                                        <th className="px-4 py-2.5 w-32 text-center bg-slate-50">Lý thuyết</th>
                                                     )}
                                                     {decisionSubjects.find(s => s.id === selectedSubjectId)?.hasPractice && (
-                                                        <th className="px-4 py-3 w-32 text-center bg-slate-50 text-orange-600">Thực hành</th>
+                                                        <th className="px-4 py-2.5 w-32 text-center bg-slate-50 text-orange-600">Thực hành</th>
                                                     )}
-                                                    <th className="px-4 py-3 w-32 text-center bg-slate-50">Tổng kết</th>
+                                                    <th className="px-4 py-2.5 w-32 text-center bg-slate-50">Tổng kết</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
@@ -421,40 +421,42 @@ const GradeEntryView: React.FC = () => {
                                                     }
 
                                                     return (
-                                                        <tr key={s.id || idx} className="hover:bg-slate-50">
-                                                            <td className="px-4 py-3 text-center text-slate-400">{idx + 1}</td>
-                                                            <td className="px-4 py-3 font-mono text-blue-600 font-bold">{s.studentCode}</td>
-                                                            <td className="px-4 py-3 font-bold uppercase text-slate-700">{s.fullName}</td>
-                                                            <td className="px-4 py-3 text-center">
+                                                        <tr key={s.id || idx} className="hover:bg-slate-50 transition-colors">
+                                                            <td className="px-4 py-2 text-center text-slate-400 font-medium">{idx + 1}</td>
+                                                            <td className="px-4 py-2 font-mono text-blue-600 font-bold">{s.studentCode}</td>
+                                                            <td className="px-4 py-2 font-bold uppercase text-slate-700">{s.fullName}</td>
+                                                            <td className="px-4 py-2 text-center">
                                                                 {(!sub?.hasTheory || isEligibleTheory) ? (
-                                                                    <span className="text-green-600 text-xs font-bold flex items-center justify-center gap-1 bg-green-50 px-2 py-1 rounded-full border border-green-100"><CheckCircle2 size={12} /> Đủ ĐK thi</span>
+                                                                    <span className="text-green-600 text-[11px] font-bold flex items-center justify-center gap-1 bg-green-50 px-2 py-0.5 rounded-full border border-green-100"><CheckCircle2 size={12} /> Đủ ĐK thi</span>
                                                                 ) : (
-                                                                    <span className="text-red-400 text-xs font-bold flex items-center justify-center gap-1 bg-red-50 px-2 py-1 rounded-full border border-red-100"><AlertCircle size={12} /> Chưa duyệt</span>
+                                                                    <span className="text-red-400 text-[11px] font-bold flex items-center justify-center gap-1 bg-red-50 px-2 py-0.5 rounded-full border border-red-100"><AlertCircle size={12} /> Chưa duyệt</span>
                                                                 )}
                                                             </td>
                                                             {sub?.hasTheory && (
-                                                                <td className="px-4 py-3 text-center">
-                                                                    <input
-                                                                        type="number"
-                                                                        className={`w-full text-center border rounded p-1 transition-all ${!isEligibleTheory ? 'bg-slate-100 text-slate-300 cursor-not-allowed border-slate-200' : 'border-slate-300 focus:ring-2 focus:ring-green-500 font-bold text-slate-800'}`}
-                                                                        disabled={!isEligibleTheory}
-                                                                        value={tVal}
-                                                                        onChange={e => handleGradeChange(s.studentCode, 'theory', e.target.value)}
-                                                                        min="0" max="10" step="0.1"
-                                                                        placeholder={isEligibleTheory ? '-' : 'X'}
-                                                                    />
+                                                                <td className="px-4 py-2 text-center">
+                                                                    <div className="w-20 mx-auto">
+                                                                        <input
+                                                                            type="number"
+                                                                            className={`w-full text-center border rounded-md p-1 transition-all text-[14px] ${!isEligibleTheory ? 'bg-slate-100 text-slate-300 cursor-not-allowed border-slate-200' : 'border-slate-300 focus:ring-2 focus:ring-green-500 font-bold text-slate-800'}`}
+                                                                            disabled={!isEligibleTheory}
+                                                                            value={tVal}
+                                                                            onChange={e => handleGradeChange(s.studentCode, 'theory', e.target.value)}
+                                                                            min="0" max="10" step="0.1"
+                                                                            placeholder={isEligibleTheory ? '-' : 'X'}
+                                                                        />
+                                                                    </div>
                                                                 </td>
                                                             )}
                                                             {sub?.hasPractice && (
-                                                                <td className="px-4 py-3 text-center">
+                                                                <td className="px-4 py-2 text-center">
                                                                     {approval.practicePass ? (
-                                                                        <span className="px-2.5 py-1 rounded-lg bg-green-100 text-green-700 font-bold text-xs border border-green-200 uppercase">Đạt</span>
+                                                                        <span className="px-2 py-0.5 rounded-md bg-green-100 text-green-700 font-bold text-[11px] border border-green-200 uppercase">Đạt</span>
                                                                     ) : (
-                                                                        <span className="px-2.5 py-1 rounded-lg bg-red-100 text-red-600 font-bold text-xs border border-red-200 uppercase">K.Đạt</span>
+                                                                        <span className="px-2 py-0.5 rounded-md bg-red-100 text-red-600 font-bold text-[11px] border border-red-200 uppercase">K.Đạt</span>
                                                                     )}
                                                                 </td>
                                                             )}
-                                                            <td className="px-4 py-3 text-center font-bold text-slate-800">
+                                                            <td className="px-4 py-2 text-center font-bold text-[14px] text-slate-800">
                                                                 {result}
                                                             </td>
                                                         </tr>

@@ -859,33 +859,33 @@ const ExamApprovalView: React.FC = () => {
             <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
                 <div className="bg-white w-full max-w-6xl rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-300">
                     {/* Header */}
-                    <div className="bg-slate-800 text-white px-6 py-4 flex justify-between items-center shrink-0">
-                        <div className="flex items-center gap-4">
-                            <div className="p-2 bg-slate-700 rounded-lg">
-                                <School size={24} className="text-blue-400" />
+                    <div className="bg-slate-800 text-white px-4 py-3 flex justify-between items-center shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="p-1.5 bg-slate-700 rounded-md">
+                                <School size={18} className="text-blue-400" />
                             </div>
                             <div>
-                                <h2 className="text-xl font-bold">{selectedDecision.className}</h2>
-                                <p className="text-sm text-slate-300 flex items-center gap-2">
-                                    <span className="font-mono bg-slate-600 px-1 rounded text-xs">{selectedDecision.number}</span>
-                                    <span className="mx-1">•</span>
-                                    <Users size={14} />
+                                <h2 className="text-[15px] font-bold">{selectedDecision.className}</h2>
+                                <p className="text-[12px] text-slate-300 flex items-center gap-2 mt-0.5">
+                                    <span className="font-mono bg-slate-600 px-1 rounded text-[11px]">{selectedDecision.number}</span>
+                                    <span className="mx-0.5">•</span>
+                                    <Users size={12} />
                                     {decisionStudents.length} học viên
-                                    <span className="mx-1">•</span>
-                                    <BookOpen size={14} />
+                                    <span className="mx-0.5">•</span>
+                                    <BookOpen size={12} />
                                     {decisionSubjects.length} môn học
                                 </p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                            <button onClick={handlePrintList} disabled={!selectedSubjectId || !(Object.values(approvals[selectedSubjectId || ''] || {}) as ApprovalRecord[]).some(a => a.theoryApproved)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg border border-slate-600 flex items-center gap-2 disabled:opacity-50 transition-colors">
-                                <Printer size={18} /> In danh sách
+                        <div className="flex items-center gap-2">
+                            <button onClick={handlePrintList} disabled={!selectedSubjectId || !(Object.values(approvals[selectedSubjectId || ''] || {}) as ApprovalRecord[]).some(a => a.theoryApproved)} className="px-3 py-1.5 text-[13px] bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-md border border-slate-600 flex items-center gap-1.5 disabled:opacity-50 transition-colors">
+                                <Printer size={15} /> In danh sách
                             </button>
-                            <button onClick={handlePrintScoreSheet} disabled={!selectedSubjectId || !(Object.values(approvals[selectedSubjectId || ''] || {}) as ApprovalRecord[]).some(a => a.theoryApproved)} className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-lg border border-orange-600 flex items-center gap-2 disabled:opacity-50 transition-colors">
-                                <FileSpreadsheet size={18} /> Phiếu điểm
+                            <button onClick={handlePrintScoreSheet} disabled={!selectedSubjectId || !(Object.values(approvals[selectedSubjectId || ''] || {}) as ApprovalRecord[]).some(a => a.theoryApproved)} className="px-3 py-1.5 text-[13px] bg-orange-600 hover:bg-orange-500 text-white font-semibold rounded-md border border-orange-600 flex items-center gap-1.5 disabled:opacity-50 transition-colors">
+                                <FileSpreadsheet size={15} /> Phiếu điểm
                             </button>
-                            <button onClick={handleSaveApproval} disabled={!selectedSubjectId} className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-500 flex items-center gap-2 disabled:opacity-50 shadow-lg shadow-blue-900/50 transition-colors">
-                                <CheckCircle2 size={18} /> Lưu duyệt thi ({
+                            <button onClick={handleSaveApproval} disabled={!selectedSubjectId} className="px-3 py-1.5 text-[13px] bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-500 flex items-center gap-1.5 disabled:opacity-50 shadow-sm shadow-blue-900/50 transition-colors">
+                                <CheckCircle2 size={15} /> Lưu duyệt thi ({
                                     (() => {
                                         const sub = decisionSubjects.find(s => s.id === selectedSubjectId);
                                         const subKey = String(sub?.strapiId || selectedSubjectId);
@@ -893,9 +893,9 @@ const ExamApprovalView: React.FC = () => {
                                     })()
                                 })
                             </button>
-                            <div className="w-px h-8 bg-slate-700 mx-2"></div>
-                            <button onClick={() => setViewMode('decision_list')} className="p-2 hover:bg-slate-700 rounded-full transition-colors text-slate-400 hover:text-white" title="Đóng">
-                                <X size={24} />
+                            <div className="w-px h-6 bg-slate-600 mx-1"></div>
+                            <button onClick={() => setViewMode('decision_list')} className="p-1.5 hover:bg-slate-700 rounded-md transition-colors text-slate-400 hover:text-white" title="Đóng">
+                                <X size={20} />
                             </button>
                         </div>
                     </div>
@@ -903,12 +903,12 @@ const ExamApprovalView: React.FC = () => {
                     <div className="flex-1 overflow-hidden flex">
                         {/* Sidebar: Subjects */}
                         <div className="w-1/4 bg-slate-50 border-r border-slate-200 overflow-y-auto flex flex-col">
-                            <div className="p-4 border-b border-slate-200 bg-white">
-                                <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                                    <Layout size={18} /> Môn học / Học phần
+                            <div className="p-3 border-b border-slate-200 bg-white">
+                                <h3 className="font-bold text-slate-700 font-[13px] flex items-center gap-2">
+                                    <Layout size={16} /> Môn học / Học phần
                                 </h3>
                             </div>
-                            <div className="p-3 space-y-2">
+                            <div className="p-2 space-y-2">
                                 {decisionSubjects.map(sub => {
                                     const subKey = String(sub.strapiId || sub.id);
                                     const subApprovals = approvals[subKey] || {};
@@ -918,9 +918,9 @@ const ExamApprovalView: React.FC = () => {
                                         <div
                                             key={sub.id}
                                             onClick={() => handleSubjectSelect(sub.id)}
-                                            className={`p-3 rounded-lg cursor-pointer transition-all border ${isSelected ? 'bg-white border-blue-500 ring-1 ring-blue-500 shadow-md' : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm'}`}
+                                            className={`p-2.5 rounded-lg cursor-pointer transition-all border ${isSelected ? 'bg-white border-blue-500 ring-1 ring-blue-500 shadow-sm' : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm'}`}
                                         >
-                                            <div className="font-bold text-slate-800 text-sm mb-1">{sub.name}</div>
+                                            <div className="font-semibold text-slate-800 text-[13px] mb-1 leading-snug">{sub.name}</div>
                                             <div className="flex justify-between items-center mt-2">
                                                 <span className="text-[10px] text-slate-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded">{sub.code}</span>
                                                 {count > 0 && (
@@ -944,22 +944,22 @@ const ExamApprovalView: React.FC = () => {
                         <div className="flex-1 bg-white overflow-y-auto p-0 relative">
                             {!selectedSubjectId ? (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 bg-slate-50/50">
-                                    <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                                        <BookOpen size={40} className="text-slate-300" />
+                                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3">
+                                        <BookOpen size={32} className="text-slate-300" />
                                     </div>
-                                    <p className="text-lg font-medium text-slate-600">Vui lòng chọn môn học bên trái</p>
-                                    <p className="text-sm">Chọn môn học để hiển thị danh sách duyệt thi</p>
+                                    <p className="text-[15px] font-medium text-slate-600">Vui lòng chọn môn học bên trái</p>
+                                    <p className="text-[13px]">Chọn môn học để hiển thị danh sách duyệt thi</p>
                                 </div>
                             ) : (
                                 <div className="flex flex-col h-full">
-                                    <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10 shadow-sm">
+                                    <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10 shadow-sm">
                                         <div>
-                                            <h3 className="font-bold text-slate-800 flex items-center gap-2 text-lg">
-                                                <BookOpen size={20} className="text-blue-600" />
+                                            <h3 className="font-bold text-slate-800 flex items-center gap-2 text-[15px]">
+                                                <BookOpen size={16} className="text-blue-600" />
                                                 {decisionSubjects.find(s => s.id === selectedSubjectId)?.name}
                                             </h3>
                                         </div>
-                                        <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-lg text-sm font-bold border border-blue-100">
+                                        <div className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-md text-[12px] font-bold border border-blue-100">
                                             Đã duyệt: {
                                                 (() => {
                                                     const sub = decisionSubjects.find(s => s.id === selectedSubjectId);
@@ -971,12 +971,12 @@ const ExamApprovalView: React.FC = () => {
                                     </div>
                                     <div className="flex-1 overflow-auto">
                                         <table className="w-full text-sm text-left">
-                                            <thead className="bg-slate-50 text-slate-500 font-bold text-xs uppercase tracking-wider border-b border-slate-200 sticky top-0 z-0">
+                                            <thead className="bg-slate-50 text-slate-500 font-bold text-[11px] uppercase tracking-wider border-b border-slate-200 sticky top-0 z-0">
                                                 <tr>
-                                                    <th className="px-6 py-4 w-10 text-center bg-slate-50">
+                                                    <th className="px-4 py-3 w-10 text-center bg-slate-50">
                                                         <input
                                                             type="checkbox"
-                                                            className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                                             checked={decisionStudents.length > 0 && decisionStudents.every(s => {
                                                                 const sub = decisionSubjects.find(sub => sub.id === selectedSubjectId);
                                                                 const subKey = String(sub?.strapiId || selectedSubjectId);
@@ -985,18 +985,18 @@ const ExamApprovalView: React.FC = () => {
                                                             onChange={handleToggleAll}
                                                         />
                                                     </th>
-                                                    <th className="px-4 py-4 w-16 text-center bg-slate-50">STT</th>
-                                                    <th className="px-6 py-4 bg-slate-50">Mã HV</th>
-                                                    <th className="px-6 py-4 bg-slate-50">Họ và tên</th>
-                                                    <th className="px-6 py-4 text-center bg-slate-50">Ngày sinh</th>
-                                                    <th className="px-6 py-4 text-center bg-slate-50">Giới tính</th>
+                                                    <th className="px-4 py-3 w-16 text-center bg-slate-50">STT</th>
+                                                    <th className="px-4 py-3 bg-slate-50">Mã HV</th>
+                                                    <th className="px-4 py-3 bg-slate-50">Họ và tên</th>
+                                                    <th className="px-4 py-3 text-center bg-slate-50">Ngày sinh</th>
+                                                    <th className="px-4 py-3 text-center bg-slate-50">Giới tính</th>
                                                     {decisionSubjects.find(s => s.id === selectedSubjectId)?.hasPractice && (
-                                                        <th className="px-6 py-4 text-center bg-slate-50 text-orange-600">Thực hành</th>
+                                                        <th className="px-4 py-3 text-center bg-slate-50 text-orange-600">Thực hành</th>
                                                     )}
-                                                    <th className="px-6 py-4 text-center bg-slate-50">Duyệt thi LT</th>
+                                                    <th className="px-4 py-3 text-center bg-slate-50">Duyệt thi LT</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-slate-100">
+                                            <tbody className="divide-y divide-slate-100 text-[13px]">
                                                 {decisionStudents.map((s, idx) => {
                                                     const sub = decisionSubjects.find(sub => sub.id === selectedSubjectId);
                                                     const subKey = String(sub?.strapiId || selectedSubjectId);
@@ -1005,48 +1005,48 @@ const ExamApprovalView: React.FC = () => {
 
                                                     return (
                                                         <tr key={s.id || idx} className={`hover:bg-blue-50 transition-colors cursor-pointer ${isApproved ? 'bg-blue-50/60' : ''}`} onClick={() => handleToggleStudent(s.studentCode)}>
-                                                            <td className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                                                            <td className="px-4 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                                                                 <input
                                                                     type="checkbox"
-                                                                    className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                                                     checked={isApproved}
                                                                     onChange={() => handleToggleStudent(s.studentCode)}
                                                                 />
                                                             </td>
-                                                            <td className="px-4 py-4 text-center text-slate-400 font-medium">{idx + 1}</td>
-                                                            <td className="px-6 py-4 font-mono text-blue-600 font-bold">{s.studentCode}</td>
-                                                            <td className="px-6 py-4 font-bold text-slate-700 uppercase">{s.fullName}</td>
-                                                            <td className="px-6 py-4 text-center text-slate-600">{formatDateVN(s.dob)}</td>
-                                                            <td className="px-6 py-4 text-center">
-                                                                <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${s.gender === 'Nam' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>
+                                                            <td className="px-4 py-2.5 text-center text-slate-400 font-medium">{idx + 1}</td>
+                                                            <td className="px-4 py-2.5 font-mono text-blue-600 font-bold">{s.studentCode}</td>
+                                                            <td className="px-4 py-2.5 font-bold text-slate-700 uppercase">{s.fullName}</td>
+                                                            <td className="px-4 py-2.5 text-center text-slate-600">{formatDateVN(s.dob)}</td>
+                                                            <td className="px-4 py-2.5 text-center">
+                                                                <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase ${s.gender === 'Nam' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>
                                                                     {s.gender || '--'}
                                                                 </span>
                                                             </td>
                                                             {sub?.hasPractice && (
-                                                                <td className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
-                                                                    <div className="flex items-center justify-center gap-2">
+                                                                <td className="px-4 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                                                    <div className="flex items-center justify-center gap-1.5">
                                                                         <button
                                                                             onClick={() => handleTogglePractice(s.studentCode, true)}
-                                                                            className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all ${record.practicePass ? 'bg-green-600 text-white border-green-700 shadow-sm' : 'bg-white text-slate-400 border-slate-200 hover:border-green-300'}`}
+                                                                            className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition-all ${record.practicePass ? 'bg-green-600 text-white border-green-700 shadow-sm' : 'bg-white text-slate-400 border-slate-200 hover:border-green-300'}`}
                                                                         >
                                                                             Đạt
                                                                         </button>
                                                                         <button
                                                                             onClick={() => handleTogglePractice(s.studentCode, false)}
-                                                                            className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all ${!record.practicePass ? 'bg-red-600 text-white border-red-700 shadow-sm' : 'bg-white text-slate-400 border-slate-200 hover:border-red-300'}`}
+                                                                            className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition-all ${!record.practicePass ? 'bg-red-600 text-white border-red-700 shadow-sm' : 'bg-white text-slate-400 border-slate-200 hover:border-red-300'}`}
                                                                         >
                                                                             K.Đạt
                                                                         </button>
                                                                     </div>
                                                                 </td>
                                                             )}
-                                                            <td className="px-6 py-4 text-center">
+                                                            <td className="px-4 py-2.5 text-center">
                                                                 {isApproved ? (
-                                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200 shadow-sm">
+                                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700 border border-green-200 shadow-sm">
                                                                         <CheckCircle2 size={12} /> Duyệt thi
                                                                     </span>
                                                                 ) : (
-                                                                    <span className="text-slate-400 text-xs font-medium">Chưa duyệt</span>
+                                                                    <span className="text-slate-400 text-[11px] font-medium">Chưa duyệt</span>
                                                                 )}
                                                             </td>
                                                         </tr>
