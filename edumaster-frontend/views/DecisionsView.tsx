@@ -462,7 +462,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   };
 
   const loadAssignments = async () => {
-    const data = await fetchCategory(COLLECTIONS.TRAINING_ASSIGNMENTS);
+    const data = await fetchCategory(`${COLLECTIONS.TRAINING_ASSIGNMENTS}?populate=decision`);
     if (data) setAssignments(data);
   };
 
@@ -989,11 +989,15 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     }
 
     // 2. Find Assignment to get dates
+    // The RECOGNITION form's relatedOpeningId = documentId of the OPENING decision
+    // The assignment.decision links to the OPENING decision (by documentId or numeric id)
     const matchingAssignment = assignments.find(a => {
       const decRel = a.decision?.data || a.decision;
-      const decId = String(decRel?.documentId || decRel?.id);
+      if (!decRel) return false;
+      const decDocId = String(decRel?.documentId || decRel?.id || '');
+      const decNumId = String(decRel?.id || decRel?.strapiId || '');
       const targetId = String(formData.relatedOpeningId);
-      return decId === targetId;
+      return decDocId === targetId || decNumId === targetId;
     });
 
     let startDateText = '...';
