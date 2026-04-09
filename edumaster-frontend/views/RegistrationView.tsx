@@ -35,6 +35,7 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
         parentName: '',
         parentPhone: '',
         classCode: '',
+        company: '',
         notes: ''
     });
     // Pre-fill form if initialData is provided
@@ -209,6 +210,7 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
             nationality: 'Việt Nam',
             phone: formData.phone,
             address: formData.address,
+            company: formData.company,
 
             photo: studentPhoto,
             notes: formData.notes,
@@ -518,6 +520,17 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                         value={formData.address}
                                         onChange={e => setFormData({ ...formData, address: e.target.value })}
                                         className="w-full px-4 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none resize-none"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Đơn vị công tác</label>
+                                    <input
+                                        type="text"
+                                        value={formData.company}
+                                        onChange={e => setFormData({ ...formData, company: e.target.value })}
+                                        className="w-full px-4 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                        placeholder="Tên cơ quan, công ty, đơn vị công tác..."
                                     />
                                 </div>
 

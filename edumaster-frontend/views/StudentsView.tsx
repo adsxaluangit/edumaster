@@ -81,6 +81,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       nationality: data.nationality || 'Việt Nam',
       address: data.address || '',
       phone: data.phone || '',
+      company: data.company || '',
       photo: data.photo || null,
       group: classObj?.name || data.group || '', // Prefer relation name
       classCode: classObj?.code || data.class_code || '',
@@ -332,6 +333,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       classId: availableClasses.find(c => c.name === student.group)?.strapiId || availableClasses.find(c => c.name === student.group)?.id || '',
       nationality: student.nationality || 'Việt Nam',
       address: student.address || '',
+      company: (student as any).company || '',
       gender: student.gender || 'Nam',
       cardNumber: student.cardNumber || '',
       notes: (student as any).notes || ''
@@ -459,6 +461,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       ethnicity: formData.ethnicity,
       nationality: formData.nationality,
       address: formData.address,
+      company: (formData as any).company || '',
       phone: formData.phone,
       photo: studentPhoto,
 
@@ -593,6 +596,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
   const handlePrintRegistrationCard = () => {
     const { fullName, dob, pob, idNumber, ethnicity, nationality, phone, address, group } = formData;
+    const company = (formData as any).company || '';
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       alert("Vui lòng cho phép Pop-ups trên trình duyệt để in phiếu.");
@@ -768,7 +772,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
           </div>
           <div class="info-row">
             <span class="label">Đơn vị công tác:</span>
-            <span class="value"></span>
+            <span class="value">${(formData as any).company || ''}</span>
           </div>
           <div class="info-row">
             <span class="label">Địa chỉ thường trú:</span>
@@ -1024,6 +1028,16 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                       placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố"
                     />
                   </div>
+                  <div className="flex items-center gap-2 col-span-2">
+                    <label className="w-32 text-right text-[12px] text-slate-600 font-medium">Đơn vị công tác:</label>
+                    <input
+                      type="text"
+                      value={(formData as any).company || ''}
+                      onChange={e => setFormData({ ...formData, ['company' as any]: e.target.value } as any)}
+                      className="flex-1 border border-slate-300 rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none"
+                      placeholder="Tên cơ quan, công ty, đơn vị..."
+                    />
+                  </div>
                   <div className="flex items-center gap-2">
                     <label className="w-32 text-right text-[12px] text-slate-600 font-medium">Điện thoại:</label>
                     <input
@@ -1224,7 +1238,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         <div className="flex gap-2 mr-2">
           <button className="px-4 py-1.5 bg-slate-50 text-slate-700 rounded border border-slate-300 hover:bg-slate-100 transition-all flex items-center gap-2 text-[12px] font-bold shadow-sm"><FileSpreadsheet size={16} /> Export Excel</button>
           <button onClick={loadData} className="px-4 py-1.5 bg-[#54a0ff] text-white rounded border border-[#2e86de] hover:brightness-105 transition-all flex items-center gap-2 text-[12px] font-bold shadow-sm"><RefreshCw size={16} /> Tải lại</button>
-          <button onClick={() => { setEditingId(null); setFormData({ studentCode: '', fullName: '', dob: '', pob: '', ethnicity: '', phone: '', idNumber: '', group: '', classCode: '', classId: '', nationality: 'Việt Nam', address: '', gender: 'Nam', cardNumber: '', ['notes' as any]: '' } as any); setStudentPhoto(null); setIsFormOpen(true); }} className="px-4 py-1.5 bg-[#54a0ff] text-white rounded border border-[#2e86de] hover:brightness-105 transition-all flex items-center gap-2 text-[12px] font-bold shadow-sm"><Plus size={16} /> Thêm mới</button>
+          <button onClick={() => { setEditingId(null); setFormData({ studentCode: '', fullName: '', dob: '', pob: '', ethnicity: '', phone: '', idNumber: '', group: '', classCode: '', classId: '', nationality: 'Việt Nam', address: '', company: '', gender: 'Nam', cardNumber: '', ['notes' as any]: '' } as any); setStudentPhoto(null); setIsFormOpen(true); }} className="px-4 py-1.5 bg-[#54a0ff] text-white rounded border border-[#2e86de] hover:brightness-105 transition-all flex items-center gap-2 text-[12px] font-bold shadow-sm"><Plus size={16} /> Thêm mới</button>
         </div>
       </div>
 
