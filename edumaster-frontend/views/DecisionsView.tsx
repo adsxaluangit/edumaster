@@ -1911,18 +1911,18 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       worksheet.getCell('A2').font = { name: 'Times New Roman', size: 11, bold: true };
       worksheet.getCell('A2').alignment = { horizontal: 'center' };
 
-      worksheet.mergeCells('D1:F1');
+      worksheet.mergeCells('D1:G1');
       worksheet.getCell('D1').value = 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM';
       worksheet.getCell('D1').font = { name: 'Times New Roman', size: 11, bold: true };
       worksheet.getCell('D1').alignment = { horizontal: 'center' };
 
-      worksheet.mergeCells('D2:F2');
+      worksheet.mergeCells('D2:G2');
       worksheet.getCell('D2').value = 'Độc lập - Tự do - Hạnh phúc';
       worksheet.getCell('D2').font = { name: 'Times New Roman', size: 11, bold: true };
       worksheet.getCell('D2').alignment = { horizontal: 'center' };
 
       // Title
-      worksheet.mergeCells('A4:F4');
+      worksheet.mergeCells('A4:G4');
       const classNameUpper = (formData.className || '..................').toUpperCase();
       worksheet.getCell('A4').value = `BẢNG KÊ NỘP KINH PHÍ ĐÀO TẠO\nLỚP: ${classNameUpper} - KHOÁ: ${formData.trainingCourse || '..................'}`;
       worksheet.getCell('A4').font = { name: 'Times New Roman', size: 14, bold: true };
@@ -1937,12 +1937,13 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         { key: 'dia_chi', width: 30 },
         { key: 'cccd', width: 18 },
         { key: 'ky_ten', width: 18 },
+        { key: 'ghi_chu', width: 15 },
       ];
 
       // Table Header Row
       const headerRow = worksheet.getRow(5);
       headerRow.height = 30;
-      headerRow.values = ['STT', 'Họ và tên', 'Số tiền', 'Địa chỉ', 'Số CCCD', 'Ký (ghi rõ họ tên)'];
+      headerRow.values = ['STT', 'Họ và tên', 'Số tiền', 'Địa chỉ', 'Số CCCD', 'Ký (ghi rõ họ tên)', 'Ghi chú'];
       headerRow.eachCell((cell) => {
         cell.font = { name: 'Times New Roman', size: 12, bold: true };
         cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
@@ -1979,8 +1980,9 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         row.getCell(4).value = s.address || '';
         row.getCell(5).value = s.cardNumber || '';
         row.getCell(6).value = ''; // Ký tên để trống
+        row.getCell(7).value = (s as any).notes || ''; // Ghi chú
 
-        for (let col = 1; col <= 6; col++) {
+        for (let col = 1; col <= 7; col++) {
           const cell = row.getCell(col);
           cell.font = { name: 'Times New Roman', size: 12 };
           cell.alignment = { vertical: 'middle' };
@@ -2014,7 +2016,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       summaryRow.getCell(3).font = { name: 'Times New Roman', size: 12, bold: true };
       summaryRow.getCell(3).alignment = { horizontal: 'right', vertical: 'middle' };
 
-      for (let col = 1; col <= 6; col++) {
+      for (let col = 1; col <= 7; col++) {
         if (col === 2) continue; // merged cell handle
         const cell = summaryRow.getCell(col);
         cell.border = {
@@ -2030,13 +2032,13 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       textSumRow.getCell(1).value = 'Số tiền bằng chữ:';
       textSumRow.getCell(1).font = { name: 'Times New Roman', size: 12, italic: true, bold: true };
       textSumRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
-      worksheet.mergeCells(`A${currentRow}:F${currentRow}`);
+      worksheet.mergeCells(`A${currentRow}:G${currentRow}`);
 
       // Ngay thang
       currentRow += 1;
       const dateRow = worksheet.getRow(currentRow);
       dateRow.height = 20;
-      worksheet.mergeCells(`D${currentRow}:F${currentRow}`);
+      worksheet.mergeCells(`D${currentRow}:G${currentRow}`);
       
       let docDateStr = formData.signedDate ? formData.signedDate : new Date().toISOString();
       const dt = new Date(docDateStr);
@@ -2064,7 +2066,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       signRoleRow.getCell(4).value = 'PHỤ TRÁCH KẾ TOÁN';
       signRoleRow.getCell(4).font = { name: 'Times New Roman', size: 12, bold: true };
       signRoleRow.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
-      worksheet.mergeCells(`D${currentRow}:F${currentRow}`);
+      worksheet.mergeCells(`D${currentRow}:G${currentRow}`);
 
       // Ký tên cụ thể (sau khoảng trống)
       currentRow += 5;
@@ -2077,7 +2079,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       signNameRow.getCell(4).value = 'Nguyễn Thanh Huyền';
       signNameRow.getCell(4).font = { name: 'Times New Roman', size: 12, bold: true };
       signNameRow.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
-      worksheet.mergeCells(`D${currentRow}:F${currentRow}`);
+      worksheet.mergeCells(`D${currentRow}:G${currentRow}`);
 
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
