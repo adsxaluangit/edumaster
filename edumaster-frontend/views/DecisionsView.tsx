@@ -1963,7 +1963,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         row.getCell(1).value = i + 1;
         row.getCell(2).value = s.fullName;
         row.getCell(3).value = ''; // Số tiền để trống
-        row.getCell(4).value = s.hometown || s.pob || '';
+        row.getCell(4).value = s.address || '';
         row.getCell(5).value = s.cardNumber || '';
         row.getCell(6).value = ''; // Ký tên để trống
 
