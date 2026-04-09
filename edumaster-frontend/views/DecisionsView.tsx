@@ -1393,18 +1393,17 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
              
              <div class="info-grid">
                 <div class="info-row">
-                    <span class="label">Mã HV:</span>
-                    <span class="value">${s.studentCode || s.cardNumber || '...'}</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Lớp:</span>
-                    <span class="value class-name">${formData.className || '...'}</span>
-                </div>
-                <div class="info-row">
                      <span class="label">Ngày sinh:</span>
                      <span class="value">${formatDate(s.dob)}</span>
                 </div>
-
+                <div class="info-row">
+                    <span class="label">Lớp:</span>
+                    <span class="value class-name">${formData.trainingCourse || '...'}</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">Mã HV:</span>
+                    <span class="value">${s.studentCode || s.cardNumber || '...'}</span>
+                </div>
              </div>
            </div>
         </div>
@@ -1454,7 +1453,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
              .school-name { font-size: 9pt; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
              .center-name { font-size: 7.5pt; font-weight: normal; text-transform: uppercase; }
              
-             .card-body { padding: 25px 12px 10px 12px; display: flex; gap: 12px; height: calc(100% - 40px); align-items: flex-start; }
+             .card-body { padding: 17px 12px 10px 12px; display: flex; gap: 12px; height: calc(100% - 40px); align-items: flex-start; }
              
              .photo-box { 
                 width: 90px; 
