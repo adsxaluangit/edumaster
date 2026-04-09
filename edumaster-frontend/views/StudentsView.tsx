@@ -36,6 +36,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   // Document Upload State
   const [uploadingStudentId, setUploadingStudentId] = useState<string | null>(null);
   const [viewingDocsStudentId, setViewingDocsStudentId] = useState<string | null>(null);
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
@@ -1146,6 +1147,59 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                     r.readAsDataURL(file);
                   }
                 }} />
+
+                {/* CCCD SECTION IN EDIT FORM */}
+                <div className="mt-6 w-full border-t border-slate-100 pt-4">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-3">Căn cước công dân (Hồ sơ)</span>
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Front */}
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-slate-400 font-medium">Mặt trước:</span>
+                      <div 
+                        className="aspect-[1.58/1] bg-slate-100 rounded border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-300 transition-all relative group"
+                        onClick={() => {
+                          const doc = editingId ? students.find(s => s.id === editingId)?.documents?.find(d => d.name === 'CCCD Mặt trước') : null;
+                          if (doc) setZoomedImage(doc.url);
+                        }}
+                      >
+                        {editingId && students.find(s => s.id === editingId)?.documents?.find(d => d.name === 'CCCD Mặt trước') ? (
+                          <img 
+                            src={students.find(s => s.id === editingId)?.documents?.find(d => d.name === 'CCCD Mặt trước')?.url} 
+                            className="w-full h-full object-cover" 
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px]">Chưa có ảnh</div>
+                        )}
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                          <Search size={16} className="text-white" />
+                        </div>
+                      </div>
+                    </div>
+                    {/* Back */}
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-slate-400 font-medium">Mặt sau:</span>
+                      <div 
+                        className="aspect-[1.58/1] bg-slate-100 rounded border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-300 transition-all relative group"
+                        onClick={() => {
+                          const doc = editingId ? students.find(s => s.id === editingId)?.documents?.find(d => d.name === 'CCCD Mặt sau') : null;
+                          if (doc) setZoomedImage(doc.url);
+                        }}
+                      >
+                        {editingId && students.find(s => s.id === editingId)?.documents?.find(d => d.name === 'CCCD Mặt sau') ? (
+                          <img 
+                            src={students.find(s => s.id === editingId)?.documents?.find(d => d.name === 'CCCD Mặt sau')?.url} 
+                            className="w-full h-full object-cover" 
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px]">Chưa có ảnh</div>
+                        )}
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                          <Search size={16} className="text-white" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
 
@@ -1196,6 +1250,28 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
             <button onClick={() => setViewingDocsStudentId(null)} className="px-4 py-1.5 bg-white border border-slate-300 rounded text-xs font-bold text-slate-600 hover:bg-slate-100">Đóng</button>
           </div>
         </div>
+      </div>
+    );
+  };
+
+  const renderLightbox = () => {
+    if (!zoomedImage) return null;
+    return (
+      <div 
+        className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4 cursor-zoom-out"
+        onClick={() => setZoomedImage(null)}
+      >
+        <button 
+          className="absolute top-4 right-4 text-white/70 hover:text-white p-2 hover:bg-white/10 rounded-full transition-all"
+          onClick={() => setZoomedImage(null)}
+        >
+          <X size={32} />
+        </button>
+        <img 
+          src={zoomedImage} 
+          className="max-w-full max-h-full object-contain rounded shadow-2xl animate-in fade-in zoom-in duration-300" 
+          onClick={(e) => e.stopPropagation()}
+        />
       </div>
     );
   };
@@ -1328,6 +1404,8 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         <div>{selectedIds.size > 0 && <span className="text-blue-600 font-bold mr-4">Đang chọn: {selectedIds.size}</span>}Trang 1 / 1</div>
       </div>
       <input type="file" ref={docInputRef} hidden onChange={handleFileChange} />
+      {renderDocsModal()}
+      {renderLightbox()}
     </div>
   );
 };

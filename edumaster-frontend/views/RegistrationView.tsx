@@ -14,6 +14,8 @@ interface RegistrationViewProps {
 const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, initialData }) => {
     const [isSuccess, setIsSuccess] = useState(false);
     const [studentPhoto, setStudentPhoto] = useState<string | null>(null);
+    const [cccdFront, setCccdFront] = useState<string | null>(null);
+    const [cccdBack, setCccdBack] = useState<string | null>(null);
     const [isCameraLive, setIsCameraLive] = useState(false);
     const [cameraError, setCameraError] = useState<string | null>(null);
     const [isCameraSupported, setIsCameraSupported] = useState(true);
@@ -218,7 +220,33 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
         };
 
         try {
-            await createCategory(COLLECTIONS.STUDENTS, newStudentData);
+            const createdStudent = await createCategory(COLLECTIONS.STUDENTS, newStudentData);
+
+            // Tải ảnh CCCD mặt trước/sau vào Hồ sơ HV (STUDENT_DOCUMENTS) nếu có
+            if (createdStudent && (createdStudent.strapiId || createdStudent.id)) {
+                const studentIdStr = createdStudent.strapiId || createdStudent.id;
+                
+                if (cccdFront) {
+                    await createCategory(COLLECTIONS.STUDENT_DOCUMENTS, {
+                        name: 'CCCD Mặt trước',
+                        type: 'image/jpeg',
+                        date: new Date().toISOString(),
+                        url: cccdFront,
+                        student: studentIdStr
+                    });
+                }
+                
+                if (cccdBack) {
+                    await createCategory(COLLECTIONS.STUDENT_DOCUMENTS, {
+                        name: 'CCCD Mặt sau',
+                        type: 'image/jpeg',
+                        date: new Date().toISOString(),
+                        url: cccdBack,
+                        student: studentIdStr
+                    });
+                }
+            }
+
             setIsSuccess(true);
         } catch (error) {
             console.error("Failed to register student", error);
@@ -548,16 +576,76 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                     </select>
                                 </div>
 
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Ghi chú</label>
+                                <div className="mb-4">
+                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Ghi chú</label>
                                     <textarea
-                                        rows={2}
                                         value={formData.notes}
-                                        onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                                        className="w-full px-4 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none resize-none"
+                                        onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                                        className="w-full px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 min-h-[80px]"
                                         placeholder="Ghi chú thêm (nếu có)..."
                                     />
                                 </div>
+
+                                <div className="mb-6 grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">CCCD Mặt trước</label>
+                                        <div className="border-2 border-dashed border-slate-300 rounded-lg p-2 text-center h-[120px] flex flex-col items-center justify-center relative hover:bg-slate-50 cursor-pointer overflow-hidden group">
+                                            {cccdFront ? (
+                                                <img src={cccdFront} alt="CCCD Front" className="absolute inset-0 w-full h-full object-cover" />
+                                            ) : (
+                                                <>
+                                                    <Upload className="text-slate-400 mb-2" size={24} />
+                                                    <span className="text-xs text-slate-500">Tải ảnh lên</span>
+                                                </>
+                                            )}
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) {
+                                                        const reader = new FileReader();
+                                                        reader.onloadend = () => {
+                                                            setCccdFront(reader.result as string);
+                                                        };
+                                                        reader.readAsDataURL(file);
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">CCCD Mặt sau</label>
+                                        <div className="border-2 border-dashed border-slate-300 rounded-lg p-2 text-center h-[120px] flex flex-col items-center justify-center relative hover:bg-slate-50 cursor-pointer overflow-hidden group">
+                                            {cccdBack ? (
+                                                <img src={cccdBack} alt="CCCD Back" className="absolute inset-0 w-full h-full object-cover" />
+                                            ) : (
+                                                <>
+                                                    <Upload className="text-slate-400 mb-2" size={24} />
+                                                    <span className="text-xs text-slate-500">Tải ảnh lên</span>
+                                                </>
+                                            )}
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) {
+                                                        const reader = new FileReader();
+                                                        reader.onloadend = () => {
+                                                            setCccdBack(reader.result as string);
+                                                        };
+                                                        reader.readAsDataURL(file);
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <hr className="mb-6 border-slate-100" />
                             </div>
                         </div>
 
