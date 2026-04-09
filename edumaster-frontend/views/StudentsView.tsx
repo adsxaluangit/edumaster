@@ -748,37 +748,40 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
             <span class="label">Ngày, tháng, năm sinh:</span>
             <span class="value">${formattedDob}</span>
           </div>
-          <div class="row-group-flex" style="margin-top: -2px;">
-            <span class="label">Nơi sinh:</span>
-            <span class="value" style="flex: 1.5">${pob}</span>
-            <span class="label" style="margin-left: 10px;">Số CCCD:</span>
-            <span class="value" style="flex: 1.5">${idNumber}</span>
-          </div>
-          <div class="row-group-flex">
-            <span class="label">Dân tộc:</span>
-            <span class="value" style="flex: 1.5">${ethnicity}</span>
-            <span class="label" style="margin-left: 10px;">Quốc tịch:</span>
-            <span class="value" style="flex: 1.5">${nationality}</span>
-          </div>
-          <div class="info-row">
-            <span class="label">Số điện thoại liên lạc:</span>
-            <span class="value">${phone}</span>
-          </div>
-          <div class="info-row">
-            <span class="label">Đơn vị công tác:</span>
-            <span class="value">${(formData as any).company || ''}</span>
-          </div>
-          <div class="info-row">
-            <span class="label">Địa chỉ thường trú:</span>
-            <span class="value">${address}</span>
-          </div>
-          <div class="info-row" style="margin-top: 2px;">
-            <span class="label">Đăng ký học:</span>
-            <span class="value">${group}</span>
+
+          <div style="margin-top: -6px; line-height: 1.15;">
+            <div class="row-group-flex" style="margin-bottom: 1px;">
+              <span class="label">Nơi sinh:</span>
+              <span class="value" style="flex: 1.5">${pob}</span>
+              <span class="label" style="margin-left: 10px;">Số CCCD:</span>
+              <span class="value" style="flex: 1.5">${idNumber}</span>
+            </div>
+            <div class="row-group-flex" style="margin-bottom: 1px;">
+              <span class="label">Dân tộc:</span>
+              <span class="value" style="flex: 1.5">${ethnicity}</span>
+              <span class="label" style="margin-left: 10px;">Quốc tịch:</span>
+              <span class="value" style="flex: 1.5">${nationality}</span>
+            </div>
+            <div class="info-row" style="margin-bottom: 1px;">
+              <span class="label">Số điện thoại liên lạc:</span>
+              <span class="value">${phone}</span>
+            </div>
+            <div class="info-row" style="margin-bottom: 1px;">
+              <span class="label">Đơn vị công tác:</span>
+              <span class="value">${(formData as any).company || ''}</span>
+            </div>
+            <div class="info-row" style="margin-bottom: 1px;">
+              <span class="label">Địa chỉ thường trú:</span>
+              <span class="value">${address}</span>
+            </div>
+            <div class="info-row" style="margin-bottom: 1px;">
+              <span class="label">Đăng ký học:</span>
+              <span class="value">${group}</span>
+            </div>
           </div>
         </div>
 
-        <div class="signature-section">
+        <div class="signature-section" style="margin-right: 15mm; margin-top: 10px;">
           <div class="signature-box">
             <div class="role">Học viên (ký và ghi rõ họ tên)</div>
           </div>
