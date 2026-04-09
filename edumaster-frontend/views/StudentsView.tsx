@@ -690,15 +690,17 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         .row-group-flex {
           display: flex;
           width: 100%;
-          margin-bottom: 4px;
+          margin-bottom: 2px;
         }
-        .row-group-flex .left {
-          flex: 1.2;
-          display: flex;
+        .row-group-flex .label {
+          white-space: nowrap;
+          min-width: fit-content;
         }
-        .row-group-flex .right {
-          flex: 0.8;
+        .row-group-flex .value {
+          margin-left: 5px;
           display: flex;
+          align-items: flex-end;
+          padding-bottom: 2px;
         }
         .content {
           margin-bottom: 10px;
@@ -739,32 +741,24 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
         <div class="content">
           <div class="info-row">
-            <span class="label">Họ và tên :</span>
+            <span class="label">Họ và tên:</span>
             <span class="value"><b>${fullName.toUpperCase()}</b></span>
           </div>
           <div class="info-row">
             <span class="label">Ngày, tháng, năm sinh:</span>
             <span class="value">${formattedDob}</span>
           </div>
-          <div class="row-group-flex">
-            <div class="left">
-              <span class="label">Nơi sinh:</span>
-              <span class="value">${pob}</span>
-            </div>
-            <div class="right">
-              <span class="label">Số CCCD :</span>
-              <span class="value">${idNumber}</span>
-            </div>
+          <div class="row-group-flex" style="margin-top: -2px;">
+            <span class="label">Nơi sinh:</span>
+            <span class="value" style="flex: 1.5">${pob}</span>
+            <span class="label" style="margin-left: 10px;">Số CCCD:</span>
+            <span class="value" style="flex: 1.5">${idNumber}</span>
           </div>
           <div class="row-group-flex">
-            <div class="left">
-              <span class="label">Dân tộc :</span>
-              <span class="value">${ethnicity}</span>
-            </div>
-            <div class="right">
-              <span class="label">Quốc tịch:</span>
-              <span class="value">${nationality}</span>
-            </div>
+            <span class="label">Dân tộc:</span>
+            <span class="value" style="flex: 1.5">${ethnicity}</span>
+            <span class="label" style="margin-left: 10px;">Quốc tịch:</span>
+            <span class="value" style="flex: 1.5">${nationality}</span>
           </div>
           <div class="info-row">
             <span class="label">Số điện thoại liên lạc:</span>
@@ -778,7 +772,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
             <span class="label">Địa chỉ thường trú:</span>
             <span class="value">${address}</span>
           </div>
-          <div class="info-row" style="margin-top: 4px;">
+          <div class="info-row" style="margin-top: 2px;">
             <span class="label">Đăng ký học:</span>
             <span class="value">${group}</span>
           </div>
