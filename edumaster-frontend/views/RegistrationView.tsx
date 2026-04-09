@@ -16,13 +16,8 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
     const [studentPhoto, setStudentPhoto] = useState<string | null>(null);
     const [cccdFront, setCccdFront] = useState<string | null>(null);
     const [cccdBack, setCccdBack] = useState<string | null>(null);
-    const [isCameraLive, setIsCameraLive] = useState(false);
-    const [cameraError, setCameraError] = useState<string | null>(null);
-    const [isCameraSupported, setIsCameraSupported] = useState(true);
     const [availableClasses, setAvailableClasses] = useState<any[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
 
     const [formData, setFormData] = useState({
         fullName: '',
@@ -59,12 +54,7 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
         }
     }, [initialData]);
 
-    // Kiểm tra trình duyệt có hỗ trợ camera API không (yêu cầu HTTPS hoặc localhost)
-    useEffect(() => {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            setIsCameraSupported(false);
-        }
-    }, []);
+
 
 
     // Load available classes from API
@@ -86,88 +76,7 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
         loadClasses();
     }, []);
 
-    const startCamera = async (e?: React.MouseEvent) => {
-        if (e) e.stopPropagation();
-        setCameraError(null);
 
-        // Kiểm tra API camera có khả dụng không (thường bị chặn trên HTTP)
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            setCameraError("Tính năng camera yêu cầu kết nối HTTPS. Vui lòng dùng chức năng tải ảnh lên thay thế.");
-            setIsCameraSupported(false);
-            return;
-        }
-
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }
-            });
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-                setIsCameraLive(true);
-            }
-        } catch (err: any) {
-            let message = "Không thể mở camera. Vui lòng thử lại.";
-            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-                message = "Bạn đã từ chối quyền truy cập camera. Vui lòng cấp quyền trong cài đặt trình duyệt rồi thử lại.";
-            } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-                message = "Không tìm thấy thiết bị camera. Vui lòng dùng tính năng tải ảnh lên.";
-            } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-                message = "Camera đang được ứng dụng khác sử dụng. Vui lòng đóng ứng dụng đó và thử lại.";
-            } else if (err.name === 'OverconstrainedError') {
-                // Fallback: thử lại với cài đặt tối thiểu
-                try {
-                    const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                    if (videoRef.current) {
-                        videoRef.current.srcObject = fallbackStream;
-                        setIsCameraLive(true);
-                        return;
-                    }
-                } catch {
-                    message = "Camera không tương thích với cài đặt yêu cầu. Vui lòng tải ảnh lên thay thế.";
-                }
-            } else if (err.name === 'SecurityError') {
-                message = "Trang web cần chạy trên HTTPS để sử dụng camera.";
-            }
-            setCameraError(message);
-        }
-    };
-
-    const stopCamera = () => {
-        if (videoRef.current?.srcObject) {
-            (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
-            videoRef.current.srcObject = null;
-        }
-        setIsCameraLive(false);
-    };
-
-    const capturePhoto = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (videoRef.current && canvasRef.current) {
-            const canvas = canvasRef.current;
-            const context = canvas.getContext('2d');
-            if (context) {
-                canvas.width = 600;
-                canvas.height = 800;
-                const video = videoRef.current;
-                const videoWidth = video.videoWidth;
-                const videoHeight = video.videoHeight;
-                const targetRatio = 3 / 4;
-                let sX = 0, sY = 0, sW = videoWidth, sH = videoHeight;
-
-                if (videoWidth / videoHeight > targetRatio) {
-                    sW = videoHeight * targetRatio;
-                    sX = (videoWidth - sW) / 2;
-                } else {
-                    sH = videoWidth / targetRatio;
-                    sY = (videoHeight - sH) / 2;
-                }
-
-                context.drawImage(video, sX, sY, sW, sH, 0, 0, 600, 800);
-                setStudentPhoto(canvas.toDataURL('image/jpeg', 0.9));
-                stopCamera();
-            }
-        }
-    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -305,72 +214,39 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                             {/* Photo Upload Section */}
                             <div className="md:col-span-1 flex flex-col items-center">
                                 <div className="w-full aspect-[3/4] max-w-[180px] bg-slate-100 rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center relative overflow-hidden group cursor-pointer hover:border-blue-400 transition-colors"
-                                    onClick={isCameraLive ? undefined : startCamera}>
+                                    onClick={() => fileInputRef.current?.click()}>
 
-                                    {isCameraLive ? (
-                                        <>
-                                            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                                            <div className="absolute inset-0 flex items-end justify-center pb-4 bg-gradient-to-t from-black/50 to-transparent">
-                                                <button type="button" onClick={capturePhoto} className="p-3 bg-white text-blue-600 rounded-full shadow hover:scale-110 transition-transform"><Camera size={20} /></button>
-                                            </div>
-                                        </>
-                                    ) : cameraError ? (
-                                        <div className="text-center p-3">
-                                            <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                                                <AlertCircle size={20} className="text-red-500" />
-                                            </div>
-                                            <p className="text-xs text-red-500 font-medium leading-tight">{cameraError}</p>
-                                            <button
-                                                type="button"
-                                                onClick={() => setCameraError(null)}
-                                                className="mt-2 text-xs text-blue-500 underline hover:text-blue-700"
-                                            >
-                                                Thử lại
-                                            </button>
-                                        </div>
-                                    ) : studentPhoto ? (
+                                    {studentPhoto ? (
                                         <img src={studentPhoto} className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="text-center p-4">
-                                            <Camera size={32} className="mx-auto text-slate-300 mb-2" />
-                                            <span className="text-xs text-slate-400 font-bold">CHỤP ẢNH 3x4</span>
+                                            <Upload size={32} className="mx-auto text-slate-300 mb-2" />
+                                            <span className="text-xs text-slate-400 font-bold uppercase">Tải ảnh 3x4</span>
                                         </div>
                                     )}
 
-                                    {!isCameraLive && (
-                                        <div className="absolute bottom-2 right-2 flex gap-2">
-                                            {studentPhoto && <button type="button" onClick={(e) => { e.stopPropagation(); setStudentPhoto(null); }} className="p-1.5 bg-white/80 rounded-full text-red-500 hover:bg-white"><X size={14} /></button>}
+                                    {studentPhoto && (
+                                        <div className="absolute top-2 right-2">
+                                            <button type="button" onClick={(e) => { e.stopPropagation(); setStudentPhoto(null); }} className="p-1.5 bg-white/80 rounded-full text-red-500 hover:bg-white shadow-sm"><X size={14} /></button>
                                         </div>
                                     )}
                                 </div>
 
                                 <div className="mt-4 w-full flex flex-col gap-2 max-w-[180px]">
-                                    {isCameraSupported && (
-                                        <button type="button" onClick={isCameraLive ? stopCamera : startCamera} className="w-full py-2 bg-blue-50 text-blue-600 text-xs font-bold rounded border border-blue-200 hover:bg-blue-100 flex items-center justify-center gap-2">
-                                            <Camera size={14} /> {isCameraLive ? 'Hủy chụp' : 'Chụp trực tiếp'}
-                                        </button>
-                                    )}
-                                    <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full py-2 bg-white text-slate-600 text-xs font-bold rounded border border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-2">
-                                        <Upload size={14} /> Tải ảnh lên
+                                    <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full py-2 bg-blue-600 text-white text-xs font-bold rounded shadow hover:bg-blue-700 flex items-center justify-center gap-2 transition-colors">
+                                        <Upload size={14} /> Tải ảnh thẻ 3x4
                                     </button>
-                                    {!isCameraSupported && (
-                                        <p className="text-xs text-amber-600 text-center leading-tight">
-                                            ⚠️ Camera không khả dụng (cần HTTPS)
-                                        </p>
-                                    )}
                                     <input type="file" ref={fileInputRef} hidden onChange={e => {
                                         const file = e.target.files?.[0];
                                         if (file) {
                                             const r = new FileReader();
                                             r.onload = () => {
                                                 setStudentPhoto(r.result as string);
-                                                stopCamera();
                                             };
                                             r.readAsDataURL(file);
                                         }
                                     }} />
                                 </div>
-                                <canvas ref={canvasRef} className="hidden" />
                             </div>
 
                             {/* Form Fields */}
