@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { LogOut, User as UserIcon, Bell, ChevronDown, Sparkles } from 'lucide-react';
+import { LogOut, User as UserIcon, Bell, ChevronDown, Sparkles, HardDriveDownload, CheckCircle2, XCircle } from 'lucide-react';
 import { NAVIGATION_ITEMS } from '../constants';
 import { User, UserRole, NavItem } from '../types';
+import { triggerBackup } from '../services/api';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -14,6 +15,27 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, activePath, onNavigate, currentUser, onLogout }) => {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [backupToast, setBackupToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const handleBackup = async () => {
+    if (isBackingUp) return;
+    setIsBackingUp(true);
+    setBackupToast(null);
+    try {
+      const result = await triggerBackup();
+      if (result?.success) {
+        setBackupToast({ type: 'success', message: result.message || `Backup thành công: ${result.filename}` });
+      } else {
+        setBackupToast({ type: 'error', message: result?.error || 'Backup thất bại. Vui lòng thử lại.' });
+      }
+    } catch (err: any) {
+      setBackupToast({ type: 'error', message: err?.message || 'Lỗi kết nối khi thực hiện backup.' });
+    } finally {
+      setIsBackingUp(false);
+      setTimeout(() => setBackupToast(null), 5000);
+    }
+  };
   const dropdownRef = useRef<HTMLDivElement>(null);
   const filteredNav = NAVIGATION_ITEMS.filter(item => item.roles.includes(currentUser.role));
 
@@ -146,6 +168,34 @@ const Layout: React.FC<LayoutProps> = ({ children, activePath, onNavigate, curre
               </div>
             );
           })}
+
+          {/* Backup Button — only for ADMIN/MANAGER */}
+          {[UserRole.ADMIN, UserRole.MANAGER].includes(currentUser.role) && (
+            <button
+              onClick={handleBackup}
+              disabled={isBackingUp}
+              title="Backup cơ sở dữ liệu"
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300 text-sm font-semibold whitespace-nowrap border ml-2 ${
+                isBackingUp
+                  ? 'bg-emerald-700 text-emerald-200 border-emerald-600 cursor-not-allowed'
+                  : 'text-emerald-400 hover:text-white hover:bg-emerald-600 border-emerald-800 hover:border-emerald-500 hover:shadow-lg hover:shadow-emerald-500/20'
+              }`}
+            >
+              {isBackingUp ? (
+                <>
+                  <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  </svg>
+                  <span>Đang backup...</span>
+                </>
+              ) : (
+                <>
+                  <HardDriveDownload size={16} />
+                  <span>Backup DB</span>
+                </>
+              )}
+            </button>
+          )}
         </nav>
 
         {/* Right Side Actions */}
@@ -177,6 +227,27 @@ const Layout: React.FC<LayoutProps> = ({ children, activePath, onNavigate, curre
           </div>
         </div>
       </header>
+
+      {/* Backup Toast Notification */}
+      {backupToast && (
+        <div
+          className={`fixed top-20 right-6 z-[200] flex items-start gap-3 px-5 py-4 rounded-2xl shadow-2xl border text-sm font-semibold animate-in fade-in slide-in-from-top-4 duration-300 max-w-sm no-print ${
+            backupToast.type === 'success'
+              ? 'bg-emerald-900/95 border-emerald-600 text-emerald-100'
+              : 'bg-red-900/95 border-red-600 text-red-100'
+          }`}
+        >
+          {backupToast.type === 'success'
+            ? <CheckCircle2 size={20} className="text-emerald-400 shrink-0 mt-0.5" />
+            : <XCircle size={20} className="text-red-400 shrink-0 mt-0.5" />}
+          <div>
+            <p className="font-black text-xs uppercase tracking-widest mb-1 opacity-70">
+              {backupToast.type === 'success' ? '✓ Backup thành công' : '✗ Backup thất bại'}
+            </p>
+            <p className="leading-snug">{backupToast.message}</p>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto bg-slate-50/50 relative">

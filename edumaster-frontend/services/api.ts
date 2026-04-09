@@ -262,3 +262,10 @@ export const COLLECTIONS = {
     AUDIT_LOGS: 'audit-logs',
     PRINT_TEMPLATES: 'print-templates'
 };
+
+// --- Database Backup ---
+
+export const triggerBackup = async (): Promise<{ success: boolean; filename?: string; sizeKB?: number; message?: string; error?: string }> => {
+    return strapiRequest('/backup', { method: 'POST' });
+};
+
