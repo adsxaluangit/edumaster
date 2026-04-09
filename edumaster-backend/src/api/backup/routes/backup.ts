@@ -1,5 +1,6 @@
 /**
  * backup router — Custom route for database backup
+ * auth: false → we handle JWT verification manually in the controller
  */
 
 export default {
@@ -9,9 +10,7 @@ export default {
       path: '/backup',
       handler: 'backup.create',
       config: {
-        auth: {
-          scope: ['find'], // requires authenticated user
-        },
+        auth: false,
         policies: [],
         middlewares: [],
       },

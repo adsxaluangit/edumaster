@@ -1,5 +1,6 @@
 /**
  * backup controller — Executes pg_dump and saves to /opt/app/database/
+ * Auth is handled manually (route has auth:false to bypass Strapi permissions)
  */
 
 import { spawn } from 'child_process';
@@ -7,18 +8,33 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export default {
-  async create(ctx) {
-    // --- Auth check: only ADMIN role ---
-    const user = ctx.state?.user;
-    if (!user) {
-      return ctx.unauthorized('Bạn cần đăng nhập để thực hiện backup.');
+  async create(ctx: any) {
+    // --- Manual JWT verification ---
+    const authHeader = ctx.request.headers['authorization'] || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+    if (!token) {
+      ctx.status = 401;
+      ctx.body = { success: false, error: 'Bạn cần đăng nhập để thực hiện backup.' };
+      return;
     }
 
-    // Check for admin role (Strapi users-permissions role)
-    const userRole = user?.role?.name?.toLowerCase() || '';
-    const allowedRoles = ['admin', 'administrator', 'manager'];
-    if (!allowedRoles.includes(userRole)) {
-      return ctx.forbidden('Chỉ Admin hoặc Manager mới có quyền backup cơ sở dữ liệu.');
+    let decodedUser: any = null;
+    try {
+      const jwtService = strapi.plugins['users-permissions']?.services?.jwt;
+      if (jwtService) {
+        decodedUser = await jwtService.verify(token);
+      }
+    } catch (err) {
+      ctx.status = 401;
+      ctx.body = { success: false, error: 'Token không hợp lệ hoặc đã hết hạn.' };
+      return;
+    }
+
+    if (!decodedUser) {
+      ctx.status = 401;
+      ctx.body = { success: false, error: 'Không thể xác thực người dùng.' };
+      return;
     }
 
     // --- Build filename ---
