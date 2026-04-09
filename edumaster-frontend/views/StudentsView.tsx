@@ -744,37 +744,37 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
             <span class="label">Họ và tên:</span>
             <span class="value"><b>${fullName.toUpperCase()}</b></span>
           </div>
-          <div class="info-row">
+          <div class="info-row" style="margin-bottom: -8px;">
             <span class="label">Ngày, tháng, năm sinh:</span>
             <span class="value">${formattedDob}</span>
           </div>
 
-          <div style="margin-top: -6px; line-height: 1.15;">
-            <div class="row-group-flex" style="margin-bottom: 1px;">
+          <div style="line-height: 1.1; margin-top: 0px;">
+            <div class="row-group-flex" style="margin-bottom: 0px;">
               <span class="label">Nơi sinh:</span>
               <span class="value" style="flex: 1.5">${pob}</span>
               <span class="label" style="margin-left: 10px;">Số CCCD:</span>
               <span class="value" style="flex: 1.5">${idNumber}</span>
             </div>
-            <div class="row-group-flex" style="margin-bottom: 1px;">
+            <div class="row-group-flex" style="margin-bottom: 0px;">
               <span class="label">Dân tộc:</span>
               <span class="value" style="flex: 1.5">${ethnicity}</span>
               <span class="label" style="margin-left: 10px;">Quốc tịch:</span>
               <span class="value" style="flex: 1.5">${nationality}</span>
             </div>
-            <div class="info-row" style="margin-bottom: 1px;">
+            <div class="info-row" style="margin-bottom: 0px;">
               <span class="label">Số điện thoại liên lạc:</span>
               <span class="value">${phone}</span>
             </div>
-            <div class="info-row" style="margin-bottom: 1px;">
+            <div class="info-row" style="margin-bottom: 0px;">
               <span class="label">Đơn vị công tác:</span>
               <span class="value">${(formData as any).company || ''}</span>
             </div>
-            <div class="info-row" style="margin-bottom: 1px;">
+            <div class="info-row" style="margin-bottom: 0px;">
               <span class="label">Địa chỉ thường trú:</span>
               <span class="value">${address}</span>
             </div>
-            <div class="info-row" style="margin-bottom: 1px;">
+            <div class="info-row" style="margin-bottom: 0px;">
               <span class="label">Đăng ký học:</span>
               <span class="value">${group}</span>
             </div>
