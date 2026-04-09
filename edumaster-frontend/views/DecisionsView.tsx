@@ -988,20 +988,30 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       template = { ...template, ...serverTemplate.content };
     }
 
-    // 2. Find Assignment to get dates
-    // The RECOGNITION form's relatedOpeningId = documentId of the OPENING decision
-    // The assignment.decision links to the OPENING decision (by documentId or numeric id)
     const matchingAssignment = assignments.find(a => {
-      const decRel = a.decision?.data || a.decision;
+      // Find the decision relation from various possible Strapi structures
+      let decRel = null;
+      if (typeof a.decision === 'object' && a.decision !== null) {
+          decRel = a.decision.data || a.decision;
+      } else if (a.related_decision) { // Fallback in case the field was renamed
+          decRel = a.related_decision.data || a.related_decision;
+      }
+      
       if (!decRel) return false;
-      const decDocId = String(decRel?.documentId || decRel?.id || '');
-      const decNumId = String(decRel?.id || decRel?.strapiId || '');
+      
+      // Extract possible IDs from the relation object
+      const decDocId = String(decRel.documentId || decRel.id || '');
+      const decNumId = String(decRel.id || decRel.strapiId || '');
       const targetId = String(formData.relatedOpeningId);
+      
+      // Log for debugging (visible in user browser)
+      console.log('Comparing Assignment', a.id, 'with target', targetId, '-> doc:', decDocId, 'num:', decNumId);
+      
       return decDocId === targetId || decNumId === targetId;
     });
 
-    let startDateText = '...';
-    let endDateText = '...';
+    let startDateText = '(Chưa xếp lịch học)';
+    let endDateText = '(Chưa xếp lịch học)';
 
     if (matchingAssignment && matchingAssignment.schedule && matchingAssignment.schedule.length > 0) {
       const dates = matchingAssignment.schedule
@@ -1016,8 +1026,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         const [y1, m1, d1] = firstDate.split('-').map(Number);
         const [y2, m2, d2] = lastDate.split('-').map(Number);
 
-        startDateText = `ngày ${d1} tháng ${m1} năm ${y1}`;
-        endDateText = `ngày ${d2} tháng ${m2} năm ${y2}`;
+        startDateText = `ngày ${String(d1).padStart(2,'0')} tháng ${String(m1).padStart(2,'0')} năm ${y1}`;
+        endDateText = `ngày ${String(d2).padStart(2,'0')} tháng ${String(m2).padStart(2,'0')} năm ${y2}`;
       }
     }
 
