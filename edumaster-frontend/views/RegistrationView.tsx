@@ -6,6 +6,37 @@ import { MOCK_STUDENTS, MOCK_NATIONS, MOCK_CLASSES } from '../mockData';
 import { fetchCategory, createCategory, COLLECTIONS } from '../services/api';
 import { parseToISO } from '../utils/dateUtils';
 
+const compressImage = (file: File, maxWidth: number = 1200): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                if (width > maxWidth) {
+                    height = Math.round((height * maxWidth) / width);
+                    width = maxWidth;
+                }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', 0.8));
+                } else {
+                    resolve(e.target?.result as string);
+                }
+            };
+            img.onerror = reject;
+            img.src = e.target?.result as string;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+};
+
 interface RegistrationViewProps {
     onLoginSuccess: () => void;
     initialData?: any;
@@ -236,14 +267,11 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                     <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full py-2 bg-blue-600 text-white text-xs font-bold rounded shadow hover:bg-blue-700 flex items-center justify-center gap-2 transition-colors">
                                         <Upload size={14} /> Tải ảnh thẻ 3x4
                                     </button>
-                                    <input type="file" ref={fileInputRef} hidden onChange={e => {
+                                    <input type="file" accept="image/*" ref={fileInputRef} hidden onChange={async e => {
                                         const file = e.target.files?.[0];
                                         if (file) {
-                                            const r = new FileReader();
-                                            r.onload = () => {
-                                                setStudentPhoto(r.result as string);
-                                            };
-                                            r.readAsDataURL(file);
+                                            const compressed = await compressImage(file, 600);
+                                            setStudentPhoto(compressed);
                                         }
                                     }} />
                                 </div>
@@ -478,14 +506,11 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                                 type="file"
                                                 accept="image/*"
                                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                                onChange={(e) => {
+                                                onChange={async (e) => {
                                                     const file = e.target.files?.[0];
                                                     if (file) {
-                                                        const reader = new FileReader();
-                                                        reader.onloadend = () => {
-                                                            setCccdFront(reader.result as string);
-                                                        };
-                                                        reader.readAsDataURL(file);
+                                                        const compressed = await compressImage(file, 1200);
+                                                        setCccdFront(compressed);
                                                     }
                                                 }}
                                             />
@@ -506,14 +531,11 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                                 type="file"
                                                 accept="image/*"
                                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                                onChange={(e) => {
+                                                onChange={async (e) => {
                                                     const file = e.target.files?.[0];
                                                     if (file) {
-                                                        const reader = new FileReader();
-                                                        reader.onloadend = () => {
-                                                            setCccdBack(reader.result as string);
-                                                        };
-                                                        reader.readAsDataURL(file);
+                                                        const compressed = await compressImage(file, 1200);
+                                                        setCccdBack(compressed);
                                                     }
                                                 }}
                                             />
