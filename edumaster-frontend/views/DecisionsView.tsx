@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, X, List, Search, Trash2, Edit, UserPlus, Save, FileText, Calendar, Users, FileDown, GraduationCap, School, Paperclip, Upload, Printer, IdCard, FileSpreadsheet, History, Clock, ShieldCheck, ScrollText } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, X, List, Search, Trash2, Edit, UserPlus, Save, FileText, Calendar, Users, FileDown, GraduationCap, School, Paperclip, Upload, Printer, IdCard, FileSpreadsheet, History, Clock, ShieldCheck, ScrollText, Camera } from 'lucide-react';
 import { Student } from '../types';
 import { fetchCategory, createCategory, updateCategory, deleteCategory, COLLECTIONS, createLog } from '../services/api';
 import ExcelJS from 'exceljs';
@@ -58,6 +58,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   useEffect(() => {
     if (mode) setViewType(mode);
   }, [mode]);
+
+  const editPhotoInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [printTemplates, setPrintTemplates] = useState<any[]>([]);
 
@@ -844,7 +846,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
             dob: editingStudentData.dob,
             card_number: editingStudentData.cardNumber,
             id_number: editingStudentData.cardNumber, // Usually same as card_number
-            pob: editingStudentData.hometown
+            pob: editingStudentData.hometown,
+            photo: editingStudentData.photo
           });
           
           // Local sync
@@ -854,7 +857,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
             dob: editingStudentData.dob,
             cardNumber: editingStudentData.cardNumber,
             idNumber: editingStudentData.cardNumber,
-            pob: editingStudentData.hometown 
+            pob: editingStudentData.hometown,
+            photo: editingStudentData.photo
           } : s));
           
           console.log("Updated source student record successfully.");
@@ -2537,6 +2541,59 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
                 onChange={e => setEditingStudentData({ ...editingStudentData, hometown: e.target.value })}
                 className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
               />
+            </div>
+
+            {/* Photo Section */}
+            <div className="pt-2 border-t border-slate-200">
+               <label className="text-[11px] font-bold text-slate-500 uppercase block mb-2">Ảnh thẻ 3x4:</label>
+               <div className="flex items-center gap-4">
+                  <div className="w-[100px] h-[133px] border-2 border-slate-200 rounded overflow-hidden bg-white shadow-inner flex items-center justify-center relative group">
+                    {editingStudentData.photo ? (
+                      <img src={editingStudentData.photo} alt="Student" className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="text-slate-200" size={48} />
+                    )}
+                    <div 
+                      onClick={() => editPhotoInputRef.current?.click()}
+                      className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+                    >
+                      <Upload className="text-white" size={24} />
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <button 
+                      onClick={() => editPhotoInputRef.current?.click()}
+                      className="px-3 py-1.5 bg-blue-50 text-blue-600 border border-blue-200 rounded text-xs font-bold hover:bg-blue-100 transition-all flex items-center gap-2"
+                    >
+                      <Camera size={14} /> Thay đổi ảnh
+                    </button>
+                    {editingStudentData.photo && (
+                      <button 
+                        onClick={() => setEditingStudentData({ ...editingStudentData, photo: '' })}
+                        className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded text-xs font-bold hover:bg-red-100 transition-all flex items-center gap-2"
+                      >
+                        <Trash2 size={14} /> Xóa ảnh
+                      </button>
+                    )}
+                    <span className="text-[10px] text-slate-400 italic">* Hệ thống tự động đồng bộ sang hồ sơ gốc</span>
+                  </div>
+                  <input 
+                    type="file" 
+                    ref={editPhotoInputRef} 
+                    hidden 
+                    accept="image/*"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          setEditingStudentData({ ...editingStudentData, photo: reader.result as string });
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }} 
+                  />
+               </div>
             </div>
           </div>
           <div className="p-4 bg-white border-t flex justify-end gap-3">
