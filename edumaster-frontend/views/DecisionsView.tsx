@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, List, Search, Trash2, Edit, UserPlus, Save, FileText, Calendar, Users, FileDown, GraduationCap, School, Paperclip, Upload, Printer, IdCard, FileSpreadsheet, History, Clock, ShieldCheck, ScrollText, Camera } from 'lucide-react';
+import { Plus, X, List, Search, Trash2, Edit, UserPlus, Save, FileText, Calendar, Users, FileDown, GraduationCap, School, Paperclip, Upload, Printer, IdCard, FileSpreadsheet, History, Clock, ShieldCheck, ScrollText, Camera, Image as ImageIcon } from 'lucide-react';
 import { Student } from '../types';
 import { fetchCategory, createCategory, updateCategory, deleteCategory, COLLECTIONS, createLog } from '../services/api';
 import ExcelJS from 'exceljs';
@@ -58,8 +58,6 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   useEffect(() => {
     if (mode) setViewType(mode);
   }, [mode]);
-
-  const editPhotoInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [printTemplates, setPrintTemplates] = useState<any[]>([]);
 
@@ -85,6 +83,12 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   const [isEditStudentModalOpen, setIsEditStudentModalOpen] = useState(false);
   const [editingStudentIndex, setEditingStudentIndex] = useState<number | null>(null);
   const [editingStudentData, setEditingStudentData] = useState<DecisionDetail | null>(null);
+
+  // Camera state for Edit Student Modal
+  const [isEditCameraLive, setIsEditCameraLive] = useState(false);
+  const editVideoRef = useRef<HTMLVideoElement>(null);
+  const editCanvasRef = useRef<HTMLCanvasElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
 
   // Audit Log State
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
@@ -824,11 +828,57 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   const handleOpenEditStudent = (student: DecisionDetail, index: number) => {
     setEditingStudentIndex(index);
     setEditingStudentData({ ...student });
+    setIsEditCameraLive(false);
     setIsEditStudentModalOpen(true);
+  };
+
+  const startEditCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
+      });
+      if (editVideoRef.current) {
+        editVideoRef.current.srcObject = stream;
+        setIsEditCameraLive(true);
+      }
+    } catch {
+      alert('Không thể truy cập Camera. Vui lòng kiểm tra quyền trình duyệt.');
+    }
+  };
+
+  const stopEditCamera = () => {
+    if (editVideoRef.current?.srcObject) {
+      (editVideoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+      editVideoRef.current.srcObject = null;
+    }
+    setIsEditCameraLive(false);
+  };
+
+  const captureEditPhoto = () => {
+    if (editVideoRef.current && editCanvasRef.current && editingStudentData) {
+      const canvas = editCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        canvas.width = 600;
+        canvas.height = 800;
+        const video = editVideoRef.current;
+        const vw = video.videoWidth;
+        const vh = video.videoHeight;
+        const ratio = 3 / 4;
+        let sX = 0, sY = 0, sW = vw, sH = vh;
+        if (vw / vh > ratio) { sW = vh * ratio; sX = (vw - sW) / 2; }
+        else { sH = vw / ratio; sY = (vh - sH) / 2; }
+        ctx.drawImage(video, sX, sY, sW, sH, 0, 0, 600, 800);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        setEditingStudentData({ ...editingStudentData, photo: dataUrl });
+        stopEditCamera();
+      }
+    }
   };
 
   const handleUpdateStudentInfo = async () => {
     if (editingStudentIndex === null || !editingStudentData) return;
+    stopEditCamera();
     
     const newList = [...tempStudents];
     newList[editingStudentIndex] = { ...editingStudentData };
@@ -836,18 +886,17 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     setIsEditStudentModalOpen(false);
 
     // Optional: Update source record in Students Management
-    if (window.confirm("Bạn có muốn cập nhật thông tin này vào Hồ sơ gốc (Quản lý học viên) để các quyết định sau này luôn đúng không?")) {
+    if (window.confirm("Bạn có muốn cập nhật thông tin (bao gồm ảnh) vào Hồ sơ gốc (Quản lý học viên) không?")) {
       try {
         const studentId = editingStudentData.id;
         if (studentId) {
-          // Fields in Strapi for 'students' are snake_case: full_name, dob, pob, card_number, id_number
           await updateCategory('students', studentId, {
             full_name: editingStudentData.fullName.toUpperCase(),
             dob: editingStudentData.dob,
             card_number: editingStudentData.cardNumber,
-            id_number: editingStudentData.cardNumber, // Usually same as card_number
+            id_number: editingStudentData.cardNumber,
             pob: editingStudentData.hometown,
-            photo: editingStudentData.photo
+            photo: editingStudentData.photo || null
           });
           
           // Local sync
@@ -858,14 +907,14 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
             cardNumber: editingStudentData.cardNumber,
             idNumber: editingStudentData.cardNumber,
             pob: editingStudentData.hometown,
-            photo: editingStudentData.photo
+            photo: editingStudentData.photo || null
           } : s));
           
-          console.log("Updated source student record successfully.");
+          console.log('Updated source student record successfully.');
         }
       } catch (err) {
-        console.error("Failed to update source student record:", err);
-        alert("Thông tin quyết định đã đổi nhưng không thể cập nhật Hồ sơ gốc.");
+        console.error('Failed to update source student record:', err);
+        alert('Thông tin quyết định đã đổi nhưng không thể cập nhật Hồ sơ gốc.');
       }
     }
     
@@ -2498,12 +2547,100 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     if (!editingStudentData) return null;
     return (
       <div className="fixed inset-0 bg-black/60 z-[130] flex items-center justify-center p-4 backdrop-blur-sm">
-        <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl overflow-hidden border border-slate-300">
+        <div className="bg-white w-full max-w-xl rounded-xl shadow-2xl overflow-hidden border border-slate-300">
           <div className="bg-blue-700 text-white px-6 py-3 flex justify-between items-center">
             <h3 className="text-[14px] font-bold uppercase tracking-tight">Sửa thông tin học viên trong QĐ</h3>
-            <button onClick={() => setIsEditStudentModalOpen(false)}><X size={18} /></button>
+            <button onClick={() => { stopEditCamera(); setIsEditStudentModalOpen(false); }}><X size={18} /></button>
           </div>
-          <div className="p-6 space-y-4 bg-slate-50">
+
+          <div className="p-5 bg-slate-50 space-y-4">
+            {/* ---- PHOTO SECTION ---- */}
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <label className="text-[11px] font-bold text-slate-500 uppercase block mb-3">Ảnh học viên (3×4)</label>
+              <div className="flex items-start gap-4">
+                {/* Preview / Camera */}
+                <div className="relative shrink-0 w-[90px] h-[120px] rounded-lg border-2 border-slate-300 overflow-hidden bg-slate-100 flex items-center justify-center">
+                  {isEditCameraLive ? (
+                    <video ref={editVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                  ) : editingStudentData.photo ? (
+                    <img src={editingStudentData.photo} alt="Ảnh học viên" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-slate-400">
+                      <ImageIcon size={28} />
+                      <span className="text-[10px] text-center leading-tight">Chưa
+có ảnh</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Canvas hidden – dùng để capture */}
+                <canvas ref={editCanvasRef} className="hidden" />
+
+                {/* Action buttons */}
+                <div className="flex flex-col gap-2 flex-1">
+                  {isEditCameraLive ? (
+                    <>
+                      <button
+                        onClick={captureEditPhoto}
+                        className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg transition-all"
+                      >
+                        <Camera size={14} /> Chụp ảnh
+                      </button>
+                      <button
+                        onClick={stopEditCamera}
+                        className="flex items-center gap-2 px-3 py-2 bg-slate-500 hover:bg-slate-600 text-white text-xs font-bold rounded-lg transition-all"
+                      >
+                        <X size={14} /> Hủy camera
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {/* Upload from file */}
+                      <input
+                        ref={editFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file && editingStudentData) {
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              setEditingStudentData({ ...editingStudentData, photo: reader.result as string });
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                          if (editFileInputRef.current) editFileInputRef.current.value = '';
+                        }}
+                      />
+                      <button
+                        onClick={() => editFileInputRef.current?.click()}
+                        className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-all"
+                      >
+                        <Upload size={14} /> Tải ảnh lên
+                      </button>
+                      <button
+                        onClick={startEditCamera}
+                        className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-all"
+                      >
+                        <Camera size={14} /> Chụp qua Webcam
+                      </button>
+                      {editingStudentData.photo && (
+                        <button
+                          onClick={() => setEditingStudentData({ ...editingStudentData, photo: undefined })}
+                          className="flex items-center gap-2 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-lg border border-red-200 transition-all"
+                        >
+                          <Trash2 size={14} /> Xóa ảnh
+                        </button>
+                      )}
+                    </>
+                  )}
+                  <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">Hỗ trợ JPG, PNG. Ảnh sẽ được tự động cắt theo tỉ lệ 3×4.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* ---- TEXT FIELDS ---- */}
             <div className="space-y-1">
               <label className="text-[11px] font-bold text-slate-500 uppercase">Họ và Tên:</label>
               <input
@@ -2542,63 +2679,19 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
                 className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-
-            {/* Photo Section */}
-            <div className="pt-2 border-t border-slate-200">
-               <label className="text-[11px] font-bold text-slate-500 uppercase block mb-2">Ảnh thẻ 3x4:</label>
-               <div className="flex items-center gap-4">
-                  <div className="w-[100px] h-[133px] border-2 border-slate-200 rounded overflow-hidden bg-white shadow-inner flex items-center justify-center relative group">
-                    {editingStudentData.photo ? (
-                      <img src={editingStudentData.photo} alt="Student" className="w-full h-full object-cover" />
-                    ) : (
-                      <User className="text-slate-200" size={48} />
-                    )}
-                    <div 
-                      onClick={() => editPhotoInputRef.current?.click()}
-                      className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
-                    >
-                      <Upload className="text-white" size={24} />
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <button 
-                      onClick={() => editPhotoInputRef.current?.click()}
-                      className="px-3 py-1.5 bg-blue-50 text-blue-600 border border-blue-200 rounded text-xs font-bold hover:bg-blue-100 transition-all flex items-center gap-2"
-                    >
-                      <Camera size={14} /> Thay đổi ảnh
-                    </button>
-                    {editingStudentData.photo && (
-                      <button 
-                        onClick={() => setEditingStudentData({ ...editingStudentData, photo: '' })}
-                        className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded text-xs font-bold hover:bg-red-100 transition-all flex items-center gap-2"
-                      >
-                        <Trash2 size={14} /> Xóa ảnh
-                      </button>
-                    )}
-                    <span className="text-[10px] text-slate-400 italic">* Hệ thống tự động đồng bộ sang hồ sơ gốc</span>
-                  </div>
-                  <input 
-                    type="file" 
-                    ref={editPhotoInputRef} 
-                    hidden 
-                    accept="image/*"
-                    onChange={e => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                          setEditingStudentData({ ...editingStudentData, photo: reader.result as string });
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                    }} 
-                  />
-               </div>
-            </div>
           </div>
+
           <div className="p-4 bg-white border-t flex justify-end gap-3">
-            <button onClick={() => setIsEditStudentModalOpen(false)} className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded transition-all">Hủy bỏ</button>
-            <button onClick={handleUpdateStudentInfo} className="px-6 py-2 bg-blue-600 text-white text-xs font-bold rounded hover:bg-blue-700 shadow-md shadow-blue-100 flex items-center gap-2 tracking-wide uppercase">
+            <button
+              onClick={() => { stopEditCamera(); setIsEditStudentModalOpen(false); }}
+              className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded transition-all"
+            >
+              Hủy bỏ
+            </button>
+            <button
+              onClick={handleUpdateStudentInfo}
+              className="px-6 py-2 bg-blue-600 text-white text-xs font-bold rounded hover:bg-blue-700 shadow-md shadow-blue-100 flex items-center gap-2 tracking-wide uppercase"
+            >
               <Save size={14} /> Cập nhật
             </button>
           </div>
