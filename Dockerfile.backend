@@ -1,5 +1,5 @@
 FROM alpine/git AS source
-RUN git clone --depth 1 --branch main https://github.com/adsxaluangit/edumaster.git /src
+RUN git clone --depth 1 --branch develop https://github.com/adsxaluangit/edumaster.git /src
 
 FROM node:20-alpine
 # Installing libvips-dev for sharp Compatibility
