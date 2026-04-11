@@ -598,11 +598,21 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
 
         // Auto-populate students from this class, EXCLUDING already assigned students
         // and ONLY including students who are approved (Đã duyệt)
-        const classStudents = allStudents.filter(s =>
-          (s as any).classId === selectedId &&
-          !assignedStudentIds.has(s.id) &&
-          (s as any).isApproved === true
-        );
+        // selectedId = c.id from dropdown (documentId in Strapi v5)
+        // s.classId = String(classData?.documentId || classData?.id)
+        // Also compare against selectedClass numeric id/strapiId for safety
+        const selectedNumericId = String(selectedClass.strapiId || '');
+        console.log('[DEBUG] handleTypeLinkSelect selectedId:', selectedId, 'selectedNumericId:', selectedNumericId);
+        console.log('[DEBUG] allStudents classIds sample:', allStudents.slice(0, 5).map(s => ({ name: s.fullName, classId: (s as any).classId, isApproved: (s as any).isApproved })));
+
+        const classStudents = allStudents.filter(s => {
+          const sClassId = String((s as any).classId || '');
+          const matchesClass = sClassId === selectedId || (selectedNumericId && sClassId === selectedNumericId);
+          const notAssigned = !assignedStudentIds.has(s.id);
+          const approved = (s as any).isApproved === true;
+          return matchesClass && notAssigned && approved;
+        });
+        console.log('[DEBUG] classStudents found:', classStudents.length, 'approved students for class', selectedId);
         const mappedStudents: DecisionDetail[] = classStudents.map((s, idx) => ({
           id: s.id,
           stt: idx + 1,
