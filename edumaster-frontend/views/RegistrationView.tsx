@@ -131,19 +131,28 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
         let finalPhotoUrl = studentPhoto;
         if (finalPhotoUrl && finalPhotoUrl.startsWith('data:image/')) {
            const uploadedInfo = await uploadFile(finalPhotoUrl, `avatar_${formData.idNumber}_${Date.now()}.jpg`);
-           if (uploadedInfo && uploadedInfo.length > 0) finalPhotoUrl = uploadedInfo[0].url;
+           if (uploadedInfo && uploadedInfo.length > 0) {
+               finalPhotoUrl = uploadedInfo[0].url;
+               setStudentPhoto(finalPhotoUrl); // Update state to prevent re-upload
+           }
         }
 
         let finalCccdFront = cccdFront;
         if (finalCccdFront && finalCccdFront.startsWith('data:image/')) {
            const uploadedInfo = await uploadFile(finalCccdFront, `cccd_front_${formData.idNumber}_${Date.now()}.jpg`);
-           if (uploadedInfo && uploadedInfo.length > 0) finalCccdFront = uploadedInfo[0].url;
+           if (uploadedInfo && uploadedInfo.length > 0) {
+               finalCccdFront = uploadedInfo[0].url;
+               setCccdFront(finalCccdFront); // Update state to prevent re-upload
+           }
         }
 
         let finalCccdBack = cccdBack;
         if (finalCccdBack && finalCccdBack.startsWith('data:image/')) {
            const uploadedInfo = await uploadFile(finalCccdBack, `cccd_back_${formData.idNumber}_${Date.now()}.jpg`);
-           if (uploadedInfo && uploadedInfo.length > 0) finalCccdBack = uploadedInfo[0].url;
+           if (uploadedInfo && uploadedInfo.length > 0) {
+               finalCccdBack = uploadedInfo[0].url;
+               setCccdBack(finalCccdBack); // Update state to prevent re-upload
+           }
         }
 
         const newStudentData = {
@@ -224,7 +233,10 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                     </p>
                     <div className="flex gap-3 justify-center">
                         <button
-                            onClick={() => window.location.reload()}
+                            onClick={() => {
+                                setIsSuccess(false);
+                                setFormData({ ...formData, classCode: '' });
+                            }}
                             className="px-6 py-2 bg-slate-100 text-slate-700 font-bold rounded hover:bg-slate-200 transition-colors"
                         >
                             Đăng ký mới
