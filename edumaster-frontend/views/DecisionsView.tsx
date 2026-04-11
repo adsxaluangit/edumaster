@@ -362,7 +362,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   const loadDecisions = async () => {
     // We need deep populate to get students' documents within the decision
     // Note: Using explicit relation population (true) instead of * to avoid validation errors with deep nested relations
-    const data = await fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?sort[0]=signed_date:desc&sort[1]=id:desc&populate[students]=true&populate[school_class]=true&populate[related_decision]=true`);
+    const data = await fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?sort[0]=signed_date:desc&sort[1]=id:desc&populate[school_class]=true&populate[related_decision]=true&populate[students][populate][documents][fields][0]=name&populate[students][populate][documents][fields][1]=url&populate[students][populate][documents][fields][2]=type`);
     if (data) {
       const mapped = data.map((d: any, index: number) => {
         const classData = d.school_class?.data || d.school_class;

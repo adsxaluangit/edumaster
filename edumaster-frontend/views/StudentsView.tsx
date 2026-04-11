@@ -117,8 +117,8 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
       // Load Students (and Map)
       const [studentsRaw, decisionsRaw] = await Promise.all([
-        // Include photo again because it will now only store short URLs, not Base64!
-        fetchCategory(`${COLLECTIONS.STUDENTS}?populate[school_class]=true&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=address&fields[9]=phone&fields[10]=is_approved&fields[11]=group&fields[12]=class_code&fields[13]=company&fields[14]=ethnicity&fields[15]=nationality&fields[16]=photo`),
+        // Include photo and lightweight documents reference (URL only)
+        fetchCategory(`${COLLECTIONS.STUDENTS}?populate[school_class]=true&populate[documents][fields][0]=name&populate[documents][fields][1]=url&populate[documents][fields][2]=type&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=address&fields[9]=phone&fields[10]=is_approved&fields[11]=group&fields[12]=class_code&fields[13]=company&fields[14]=ethnicity&fields[15]=nationality&fields[16]=photo`),
         fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?populate[students]=true&populate[school_class]=true`)
       ]);
 
@@ -551,11 +551,20 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       reader.onload = async () => {
         try {
           const studentObj = students.find(s => s.id === studentId);
+          let finalDocUrl = reader.result as string; 
+          
+          if (finalDocUrl.startsWith('data:image/')) {
+             const uploadedInfo = await uploadFile(finalDocUrl, `doc_${studentObj?.studentCode || Date.now()}_${file.name}`);
+             if (uploadedInfo && uploadedInfo.length > 0) {
+                 finalDocUrl = uploadedInfo[0].url;
+             }
+          }
+
           const payload = {
             name: file.name,
             type: file.type,
             date: new Date().toLocaleDateString('vi-VN'),
-            url: reader.result as string,
+            url: finalDocUrl,
             student: studentObj?.strapiId || studentId // Use numeric ID for relation
           };
 
