@@ -191,6 +191,19 @@ export const fetchCategory = async (collectionName: string) => {
     return normalizeStrapiList(json);
 };
 
+export const fetchCategoryPaginated = async (collectionName: string, page: number = 1, pageSize: number = 50, filters: string = '', customParams: string = 'populate=*') => {
+    let endpoint = `/${collectionName}?${customParams}&pagination[page]=${page}&pagination[pageSize]=${pageSize}&publicationState=preview`;
+    if (filters) {
+        endpoint += `&${filters}`;
+    }
+
+    const json = await strapiRequest(endpoint);
+    return {
+        data: normalizeStrapiList(json),
+        meta: json?.meta || { pagination: { page: 1, pageSize: 50, pageCount: 1, total: 0 } }
+    };
+};
+
 export const fetchItem = async (collectionName: string, id: string | number) => {
     const endpoint = `/${collectionName}/${id}?populate=*`;
     const json = await strapiRequest(endpoint);

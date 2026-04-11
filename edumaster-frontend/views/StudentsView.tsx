@@ -1,9 +1,9 @@
-
+﻿
 import React, { useState, useRef, useEffect } from 'react';
 import { FileSpreadsheet, RefreshCw, Trash2, Plus, Search, Filter, ChevronDown, X, Camera, Save, Calendar, User, Upload, Check, Phone, MapPin, Briefcase, Flag, School, Edit3, Image as ImageIcon, FileText, CheckCircle2, XCircle, ShieldCheck, Printer } from 'lucide-react';
 import { Student } from '../types';
 import { MOCK_STUDENTS, MOCK_NATIONS, MOCK_CLASSES } from '../mockData';
-import { fetchCategory, createCategory, updateCategory, deleteCategory, COLLECTIONS, uploadFile } from '../services/api';
+import { fetchCategory, fetchCategoryPaginated, createCategory, updateCategory, deleteCategory, COLLECTIONS, uploadFile } from '../services/api';
 import { formatDate, parseToISO } from '../utils/dateUtils';
 
 // MOCK_STUDENTS loaded from mockData.ts
@@ -25,6 +25,12 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   const [nations, setNations] = useState<any[]>([]);
   const [availableClasses, setAvailableClasses] = useState<any[]>([]);
   const [allDecisions, setAllDecisions] = useState<any[]>([]);
+
+  // Server-Side Config
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(50);
+  const [totalStudents, setTotalStudents] = useState(0);
+  const [searchTermServer, setSearchTermServer] = useState('');
 
   // Photo states
   const [studentPhoto, setStudentPhoto] = useState<string | null>(null);
@@ -105,45 +111,34 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   const loadData = async () => {
     setLoading(true);
     try {
-      // Load Classes
       const classesData = await fetchCategory(COLLECTIONS.CLASSES);
       if (classesData) setAvailableClasses(classesData);
       else setAvailableClasses(MOCK_CLASSES);
 
-      // Load Nations
       const nationsData = await fetchCategory(COLLECTIONS.NATIONS);
       if (nationsData) setNations(nationsData);
       else setNations(MOCK_NATIONS);
 
-      // Load Students (and Map)
-      const [studentsRaw, decisionsRaw] = await Promise.all([
-        // Include photo and lightweight documents reference (URL only)
-        fetchCategory(`${COLLECTIONS.STUDENTS}?populate[school_class]=true&populate[documents][fields][0]=name&populate[documents][fields][1]=url&populate[documents][fields][2]=type&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=address&fields[9]=phone&fields[10]=is_approved&fields[11]=group&fields[12]=class_code&fields[13]=company&fields[14]=ethnicity&fields[15]=nationality&fields[16]=photo`),
-        fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?populate[students]=true&populate[school_class]=true`)
-      ]);
+      const customParams = `populate[school_class]=true&populate[documents][fields][0]=name&populate[documents][fields][1]=url&populate[documents][fields][2]=type&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=address&fields[9]=phone&fields[10]=is_approved&fields[11]=group&fields[12]=class_code&fields[13]=company&fields[14]=ethnicity&fields[15]=nationality&fields[16]=photo`;
+      
+      let filters = '';
+      if (searchTermServer) {
+         filters = `filters[$or][0][full_name][$containsi]=${encodeURIComponent(searchTermServer)}&filters[$or][1][id_number][$contains]=${encodeURIComponent(searchTermServer)}`;
+      }
+      if (selectedClassFilter) {
+         filters += (filters ? '&' : '') + `filters[group][$eq]=${encodeURIComponent(selectedClassFilter)}`;
+      }
 
-      if (decisionsRaw) setAllDecisions(decisionsRaw);
+      const res = await fetchCategoryPaginated(COLLECTIONS.STUDENTS, currentPage, pageSize, filters, customParams);
+      if (res && res.data) {
+        setStudents(res.data.map(mapStudentFromApi));
+        setTotalStudents(res.meta.pagination.total);
+      }
 
-      if (studentsRaw) {
-        console.log('[DEBUG] Students Raw Sample:', studentsRaw[0]);
-        const mappedStudents = studentsRaw.map(mapStudentFromApi);
-
-        // Identify students who have been assigned to an OPENING decision
-        const assignedStudentIds = new Set<string>();
-        if (decisionsRaw) {
-          decisionsRaw
-            .filter((d: any) => d.type === 'OPENING')
-            .forEach((d: any) => {
-              const studentsInDec = d.students?.data || d.students || [];
-              studentsInDec.forEach((s: any) => {
-                assignedStudentIds.add(String(s.documentId || s.id));
-              });
-            });
-        }
-
-        // Hide assigned students from active management
-        const activeStudents = mappedStudents.filter(s => !assignedStudentIds.has(s.id));
-        setStudents(activeStudents);
+      // Just fetching decisions for forms/modals
+      const decisionsRaw = await fetchCategory(COLLECTIONS.CLASS_DECISIONS);
+      if (decisionsRaw) {
+        setAllDecisions(decisionsRaw);
       }
     } catch (e) {
       console.error("Failed to load data:", e);
@@ -154,7 +149,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [currentPage, searchTermServer, selectedClassFilter]);
 
   useEffect(() => {
     if (prefilledStudent) {
@@ -185,59 +180,8 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
 
 
-  // Filtered Students
-  const filteredStudents = students.filter(s => {
-    const searchLower = searchTerm.toLowerCase();
-    const fullName = s.fullName ? s.fullName.toLowerCase() : '';
-    const studentCode = s.studentCode ? s.studentCode.toLowerCase() : '';
-    const groupName = s.group ? s.group.toLowerCase() : '';
-
-    const matchesSearch = fullName.includes(searchLower) ||
-      studentCode.includes(searchLower) ||
-      groupName.includes(searchLower);
-
-    const matchesClass = selectedClassFilter ? s.group === selectedClassFilter : true;
-
-    // --- Visibility Rule: Hide if Graduated < 5 Years ---
-    const isRestricted = allDecisions.some((d: any) => {
-      // Check if decision is RECOGNITION
-      if (d.type !== 'RECOGNITION') return false;
-
-      // Check if decision is for the student's current class
-      const decClass = d.school_class?.data || d.school_class;
-      const decClassName = (decClass?.attributes?.name || decClass?.name || d.class_name || '').trim().toLowerCase();
-      if (decClassName !== (s.group || '').trim().toLowerCase()) return false;
-
-      // Check if student is in this decision
-      const studentsInDec = d.students?.data || d.students || [];
-      const isStudentInDecision = studentsInDec.some((sDec: any) =>
-        (sDec.attributes?.student_code || sDec.student_code) === s.studentCode ||
-        (sDec.attributes?.id_number || sDec.id_number) === s.studentCode
-      );
-
-      if (!isStudentInDecision) return false;
-
-      // Check Time Constraint (< 5 Years)
-      const signedDateStr = d.signed_date || d.signedDate;
-      if (!signedDateStr) return false;
-
-      const signedDate = new Date(signedDateStr);
-      const now = new Date();
-      const diffYears = (now.getTime() - signedDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-
-      return diffYears < 5;
-    });
-
-    if (isRestricted) return false;
-    // ----------------------------------------------------
-
-    // Debug logging for specific missing case
-    if (!matchesSearch && !matchesClass) {
-      // console.log(`Hidden: ${s.fullName} - Class: ${s.group}`);
-    }
-
-    return matchesSearch && matchesClass;
-  });
+  // Filtered Students (Filtering is now handled Server-Side)
+  const filteredStudents = students;
 
   // Handle class selection change
   const handleClassChange = (className: string) => {
@@ -1314,16 +1258,25 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Tìm kiếm theo Tên, Mã học viên..."
+            placeholder="Tìm kiếm: Họ tên, CCCD (Enter)..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setCurrentPage(1);
+                setSearchTermServer(searchTerm);
+              }
+            }}
             className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 ring-blue-500/20"
           />
         </div>
         <div className="w-[180px]">
           <select
             value={selectedClassFilter}
-            onChange={(e) => setSelectedClassFilter(e.target.value)}
+            onChange={(e) => {
+              setSelectedClassFilter(e.target.value);
+              setCurrentPage(1);
+            }}
             className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 ring-blue-500/20 bg-white"
           >
             <option value="">-- Tất cả lớp --</option>
@@ -1424,8 +1377,23 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         </table>
       </div>
       <div className="bg-slate-50 border-t px-4 py-1.5 flex justify-between items-center text-[11px] text-slate-500 font-medium">
-        <div>Hiển thị {filteredStudents.length} / {students.length} học viên</div>
-        <div>{selectedIds.size > 0 && <span className="text-blue-600 font-bold mr-4">Đang chọn: {selectedIds.size}</span>}Trang 1 / 1</div>
+        <div>Tổng số bản ghi: {totalStudents} học viên (Trang {currentPage})</div>
+        <div className="flex gap-4 items-center">
+          {selectedIds.size > 0 && <span className="text-blue-600 font-bold mr-4">Đang chọn: {selectedIds.size}</span>}
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+              disabled={currentPage === 1}
+              className="px-2 py-1 border rounded bg-white hover:bg-slate-200 disabled:opacity-50"
+            >« Trước</button>
+            <span className="font-bold text-blue-600 px-2">Trang {currentPage} / {Math.ceil(totalStudents / pageSize) || 1}</span>
+            <button 
+              onClick={() => setCurrentPage(p => p + 1)} 
+              disabled={currentPage >= Math.ceil(totalStudents / pageSize)}
+              className="px-2 py-1 border rounded bg-white hover:bg-slate-200 disabled:opacity-50"
+            >Sau »</button>
+          </div>
+        </div>
       </div>
       <input type="file" ref={docInputRef} hidden onChange={handleFileChange} />
       {renderDocsModal()}
