@@ -597,8 +597,11 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         });
 
         // Auto-populate students from this class, EXCLUDING already assigned students
+        // and ONLY including students who are approved (Đã duyệt)
         const classStudents = allStudents.filter(s =>
-          (s as any).classId === selectedId && !assignedStudentIds.has(s.id)
+          (s as any).classId === selectedId &&
+          !assignedStudentIds.has(s.id) &&
+          (s as any).isApproved === true
         );
         const mappedStudents: DecisionDetail[] = classStudents.map((s, idx) => ({
           id: s.id,
@@ -2736,10 +2739,15 @@ có ảnh</span>
                 {allStudents.filter(s => {
                   const matchSearch = s.fullName.toLowerCase().includes(searchStudent.toLowerCase()) ||
                     s.studentCode.toLowerCase().includes(searchStudent.toLowerCase());
-                  // In Opening mode, filter by selected class and EXCLUDE graduated students
+                  // In Opening mode, filter by selected class, EXCLUDE assigned students,
+                  // and ONLY show students who are approved (Đã duyệt)
                   // In Recognition, show all (or could filter differently)
                   const matchClass = viewType === 'OPENING'
-                    ? (s.classId === formData.classId && !assignedStudentIds.has(s.id))
+                    ? (
+                        (s as any).classId === formData.classId &&
+                        !assignedStudentIds.has(s.id) &&
+                        (s as any).isApproved === true
+                      )
                     : true;
                   return matchSearch && matchClass;
                 }).map(s => (
