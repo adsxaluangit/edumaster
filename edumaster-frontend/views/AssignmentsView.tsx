@@ -249,9 +249,9 @@ const AssignmentsView: React.FC = () => {
       const subId = String(subRef.documentId || subRef.id);
       const sub = subjects.find(s => String(s.id) === subId || String(s.documentId) === subId) || subRef;
       const subName = sub.attributes?.name || sub.name || "Môn học";
-      const totalHours = sub.attributes?.total_hours || sub.total_hours || sub.totalHours || 4;
+      const totalHours = sub.attributes?.total_hours || sub.total_hours || sub.totalHours || 5;
 
-      const sessions = Math.ceil(totalHours / 4);
+      const sessions = Math.ceil(totalHours / 5);
       for (let i = 0; i < sessions; i++) {
         sessionQueue.push({ subId, subName });
       }
