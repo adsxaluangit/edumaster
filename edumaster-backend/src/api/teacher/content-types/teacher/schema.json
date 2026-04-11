@@ -19,6 +19,9 @@
         "name": {
             "type": "string"
         },
+        "full_name": {
+            "type": "string"
+        },
         "specialization": {
             "type": "string"
         },
