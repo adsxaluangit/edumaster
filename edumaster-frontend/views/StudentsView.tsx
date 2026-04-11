@@ -1,4 +1,4 @@
-﻿
+
 import React, { useState, useRef, useEffect } from 'react';
 import { FileSpreadsheet, RefreshCw, Trash2, Plus, Search, Filter, ChevronDown, X, Camera, Save, Calendar, User, Upload, Check, Phone, MapPin, Briefcase, Flag, School, Edit3, Image as ImageIcon, FileText, CheckCircle2, XCircle, ShieldCheck, Printer } from 'lucide-react';
 import { Student } from '../types';
@@ -180,8 +180,20 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
 
 
-  // Filtered Students (Filtering is now handled Server-Side)
-  const filteredStudents = students;
+  // Filtered Students (Filtering is now handled Server-Side, but Assignment Filtering must be done locally)
+  const filteredStudents = students.filter(s => {
+    let isAssigned = false;
+    for (const d of allDecisions) {
+      if (d.type === 'OPENING' || d.type === 'RECOGNITION') {
+        const studentsInDec = d.students?.data || d.students || [];
+        if (studentsInDec.some((sDec: any) => String(sDec.documentId || sDec.id) === String(s.id))) {
+          isAssigned = true;
+          break;
+        }
+      }
+    }
+    return !isAssigned;
+  });
 
   // Handle class selection change
   const handleClassChange = (className: string) => {
