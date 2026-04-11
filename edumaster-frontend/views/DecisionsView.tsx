@@ -16,6 +16,7 @@ interface DecisionDetail {
   studentCode: string;
   years: string;
   hometown: string;
+  address: string;
   notes: string;
   documents?: { id: string; name: string; url: string; date: string; type: string }[];
   photo?: string;
@@ -437,6 +438,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
           lastName: d.last_name || '',
           dob: d.dob || '',
           pob: d.pob || '',
+          address: d.address || '',
           gender: d.gender || '',
           idNumber: d.id_number || '',
           cardNumber: d.card_number || '',
@@ -622,6 +624,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
           studentCode: s.studentCode,
           years: '',
           hometown: s.pob || '',
+          address: (s as any).address || '',
           notes: '',
           gender: s.gender || '',
           documents: s.documents || [],
@@ -830,6 +833,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       studentCode: s.studentCode,
       years: '',
       hometown: s.pob,
+      address: (s as any).address || '',
       notes: '',
       photo: s.photo,
     } as DecisionDetail));
@@ -2214,7 +2218,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
           <td class="center">${i + 1}</td>
           <td class="left no-border-right w-first-name">${first}</td>
           <td class="center no-border-left w-last-name">${last}</td>
-          <td class="center"></td>
+          <td class="left">${s.address || s.hometown || ''}</td>
           <td class="center"></td>
           <td class="center"></td>
         </tr>
