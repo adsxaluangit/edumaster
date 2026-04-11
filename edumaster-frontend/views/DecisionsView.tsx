@@ -392,6 +392,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
               dob: item.dob || '',
               studentCode: item.student_code || item.studentCode || item.code || '',
               hometown: item.pob || '',
+              address: item.address || '',
               cardNumber: item.card_number || item.id_number || '',
               years: '',
               notes: '',
