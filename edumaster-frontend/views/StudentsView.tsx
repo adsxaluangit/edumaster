@@ -131,7 +131,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
       // Fetch both concurrently to avoid UI flash (race condition)
       const [res, decisionsRaw] = await Promise.all([
-        fetchCategoryPaginated(COLLECTIONS.STUDENTS, currentPage, pageSize, filters, customParams),
+        fetchCategoryPaginated('students/unassigned', currentPage, pageSize, filters, customParams),
         fetchCategory(COLLECTIONS.CLASS_DECISIONS)
       ]);
 
@@ -184,20 +184,8 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
 
 
-  // Filtered Students (Filtering is now handled Server-Side, but Assignment Filtering must be done locally)
-  const filteredStudents = students.filter(s => {
-    let isAssigned = false;
-    for (const d of allDecisions) {
-      if (d.type === 'OPENING' || d.type === 'RECOGNITION') {
-        const studentsInDec = d.students?.data || d.students || [];
-        if (studentsInDec.some((sDec: any) => String(sDec.documentId || sDec.id) === String(s.id))) {
-          isAssigned = true;
-          break;
-        }
-      }
-    }
-    return !isAssigned;
-  });
+  // Filtered Students (Filtering is now natively handled by the SQL Backend Custom Endpoint)
+  const filteredStudents = students;
 
   // Handle class selection change
   const handleClassChange = (className: string) => {
