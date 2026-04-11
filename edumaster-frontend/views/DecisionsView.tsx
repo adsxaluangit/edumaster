@@ -362,7 +362,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   const loadDecisions = async () => {
     // We need deep populate to get students' documents within the decision
     // Note: Using explicit relation population (true) instead of * to avoid validation errors with deep nested relations
-    const data = await fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?sort[0]=signed_date:desc&sort[1]=id:desc&populate[students][populate][0]=documents&populate[school_class]=true&populate[related_decision]=true`);
+    const data = await fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?sort[0]=signed_date:desc&sort[1]=id:desc&populate[students]=true&populate[school_class]=true&populate[related_decision]=true`);
     if (data) {
       const mapped = data.map((d: any, index: number) => {
         const classData = d.school_class?.data || d.school_class;
@@ -425,7 +425,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   };
 
   const loadStudents = async () => {
-    const data = await fetchCategory(COLLECTIONS.STUDENTS);
+    // Exclude photo and documents Base64
+    const data = await fetchCategory(`${COLLECTIONS.STUDENTS}?populate[school_class]=true&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=address&fields[9]=phone&fields[10]=is_approved&fields[11]=group&fields[12]=class_code&fields[13]=company&fields[14]=ethnicity&fields[15]=nationality`);
     if (data) {
       setAllStudents(data.map((d: any) => {
         const classData = d.school_class?.data || d.school_class;

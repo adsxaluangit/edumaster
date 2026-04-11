@@ -117,7 +117,8 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
       // Load Students (and Map)
       const [studentsRaw, decisionsRaw] = await Promise.all([
-        fetchCategory(COLLECTIONS.STUDENTS),
+        // Exclude photo and documents to prevent memory overflow
+        fetchCategory(`${COLLECTIONS.STUDENTS}?populate[school_class]=true&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=address&fields[9]=phone&fields[10]=is_approved&fields[11]=group&fields[12]=class_code&fields[13]=company&fields[14]=ethnicity&fields[15]=nationality`),
         fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?populate[students]=true&populate[school_class]=true`)
       ]);
 
@@ -153,7 +154,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
   useEffect(() => {
     loadData();
-  }, [isFormOpen]);
+  }, []);
 
   useEffect(() => {
     if (prefilledStudent) {
@@ -492,7 +493,8 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         alert(editingId ? 'Cập nhật thành công!' : 'Thêm mới thành công!');
         setIsFormOpen(false);
         setEditingId(null);
-        // Re-fetch handled by useEffect dependency [isFormOpen]
+        // Re-fetch handled explicitly after successful save
+        loadData();
       } catch (e) {
         console.error(e);
         alert("Có lỗi xảy ra khi lưu dữ liệu!");
