@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Camera, X, Upload, Save, CheckCircle, LogIn, Lock, User, ChevronDown, AlertCircle } from 'lucide-react';
 import { Student } from '../types';
 import { MOCK_STUDENTS, MOCK_NATIONS, MOCK_CLASSES } from '../mockData';
-import { fetchCategory, createCategory, COLLECTIONS } from '../services/api';
+import { fetchCategory, createCategory, COLLECTIONS, uploadFile } from '../services/api';
 import { parseToISO } from '../utils/dateUtils';
 
 const compressImage = (file: File, maxWidth: number = 1200): Promise<string> => {
@@ -128,7 +128,24 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
         // Find selected class
         const selectedClass = availableClasses.find(c => c.code === formData.classCode);
 
-        // Payload matching Strapi schema (snake_case)
+        let finalPhotoUrl = studentPhoto;
+        if (finalPhotoUrl && finalPhotoUrl.startsWith('data:image/')) {
+           const uploadedInfo = await uploadFile(finalPhotoUrl, `avatar_${formData.idNumber}_${Date.now()}.jpg`);
+           if (uploadedInfo && uploadedInfo.length > 0) finalPhotoUrl = uploadedInfo[0].url;
+        }
+
+        let finalCccdFront = cccdFront;
+        if (finalCccdFront && finalCccdFront.startsWith('data:image/')) {
+           const uploadedInfo = await uploadFile(finalCccdFront, `cccd_front_${formData.idNumber}_${Date.now()}.jpg`);
+           if (uploadedInfo && uploadedInfo.length > 0) finalCccdFront = uploadedInfo[0].url;
+        }
+
+        let finalCccdBack = cccdBack;
+        if (finalCccdBack && finalCccdBack.startsWith('data:image/')) {
+           const uploadedInfo = await uploadFile(finalCccdBack, `cccd_back_${formData.idNumber}_${Date.now()}.jpg`);
+           if (uploadedInfo && uploadedInfo.length > 0) finalCccdBack = uploadedInfo[0].url;
+        }
+
         const newStudentData = {
             stt: 0, // Backend or logic should handle this, setting 0 for now as 'pending'
             class_code: selectedClass ? selectedClass.code : 'PENDING',
@@ -154,7 +171,7 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
             address: formData.address,
             company: formData.company,
 
-            photo: studentPhoto,
+            photo: finalPhotoUrl,
             notes: formData.notes,
             is_approved: false
         };
@@ -166,22 +183,22 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
             if (createdStudent && (createdStudent.strapiId || createdStudent.id)) {
                 const studentIdStr = createdStudent.strapiId || createdStudent.id;
                 
-                if (cccdFront) {
+                if (finalCccdFront) {
                     await createCategory(COLLECTIONS.STUDENT_DOCUMENTS, {
                         name: 'CCCD Mặt trước',
                         type: 'image/jpeg',
                         date: new Date().toISOString(),
-                        url: cccdFront,
+                        url: finalCccdFront,
                         student: studentIdStr
                     });
                 }
                 
-                if (cccdBack) {
+                if (finalCccdBack) {
                     await createCategory(COLLECTIONS.STUDENT_DOCUMENTS, {
                         name: 'CCCD Mặt sau',
                         type: 'image/jpeg',
                         date: new Date().toISOString(),
-                        url: cccdBack,
+                        url: finalCccdBack,
                         student: studentIdStr
                     });
                 }
