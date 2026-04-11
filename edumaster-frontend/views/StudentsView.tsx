@@ -129,17 +129,21 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
          filters += (filters ? '&' : '') + `filters[group][$eq]=${encodeURIComponent(selectedClassFilter)}`;
       }
 
-      const res = await fetchCategoryPaginated(COLLECTIONS.STUDENTS, currentPage, pageSize, filters, customParams);
+      // Fetch both concurrently to avoid UI flash (race condition)
+      const [res, decisionsRaw] = await Promise.all([
+        fetchCategoryPaginated(COLLECTIONS.STUDENTS, currentPage, pageSize, filters, customParams),
+        fetchCategory(COLLECTIONS.CLASS_DECISIONS)
+      ]);
+
+      if (decisionsRaw) {
+        setAllDecisions(decisionsRaw);
+      }
+
       if (res && res.data) {
         setStudents(res.data.map(mapStudentFromApi));
         setTotalStudents(res.meta.pagination.total);
       }
 
-      // Just fetching decisions for forms/modals
-      const decisionsRaw = await fetchCategory(COLLECTIONS.CLASS_DECISIONS);
-      if (decisionsRaw) {
-        setAllDecisions(decisionsRaw);
-      }
     } catch (e) {
       console.error("Failed to load data:", e);
     } finally {
