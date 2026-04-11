@@ -933,14 +933,14 @@ const AssignmentsView: React.FC = () => {
                 <col style="width:32px"/>
                 <col style="width:110px"/>
                 <col style="width:58px"/>
-                ${Array(SESSIONS_PER_PAGE).fill('<col style="width:38px"/>').join('')}
+                ${Array(sessionChunk.length).fill('<col style="width:38px"/>').join('')}
                 <col style="width:52px"/>
               </colgroup>
               <thead>
                 <tr>
                   <th rowspan="3" style="border:1px solid black; text-align:center; vertical-align:middle; font-size:11px;">STT</th>
                   <th colspan="2" style="border:1px solid black; text-align:center; font-size:11px;">NGÀY THÁNG</th>
-                  <th colspan="${SESSIONS_PER_PAGE}" style="border:1px solid black; text-align:center; font-size:11px;">ĐIỂM DANH HÀNG NGÀY</th>
+                  <th colspan="${sessionChunk.length}" style="border:1px solid black; text-align:center; font-size:11px;">ĐIỂM DANH HÀNG NGÀY</th>
                   <th rowspan="3" style="border:1px solid black; text-align:center; vertical-align:middle; font-size:11px;">Ghi chú</th>
                 </tr>
                 <tr>
