@@ -2219,9 +2219,9 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
           <td class="center">${i + 1}</td>
           <td class="left no-border-right w-first-name">${first}</td>
           <td class="center no-border-left w-last-name">${last}</td>
+          <td class="center"></td>
+          <td class="center"></td>
           <td class="left">${s.address || s.hometown || ''}</td>
-          <td class="center"></td>
-          <td class="center"></td>
         </tr>
       `;
 
