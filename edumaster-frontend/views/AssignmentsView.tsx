@@ -853,10 +853,7 @@ const AssignmentsView: React.FC = () => {
 
           // Build session header cells: date row + period row
           const sessionDateCells = sessionChunk.map((s, idx) => {
-            const formatted = formatDateVN(s.date);
-            const parts = formatted.split('/');
-            const dayMonth = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : formatted;
-            return `<th style="width:40px; color: red; font-size: 10px; padding: 2px;">${dayMonth}<br/><span style="font-size:9px;">${s.shift}</span></th>`;
+            return `<th style="width:40px; font-size:10px; padding: 2px;"></th>`;
           }).join('');
 
           // Empty cells to pad to SESSIONS_PER_PAGE
@@ -927,7 +924,7 @@ const AssignmentsView: React.FC = () => {
               </tr>
               <tr>
                 <td style="border:none !important; padding:2px 0; width:60%;"><b>Môn học:</b> ${subjectName}</td>
-                <td style="border:none !important; padding:2px 0;">Từ ngày ${fromDate} đến ngày ${toDate}</td>
+                <td style="border:none !important; padding:2px 0;">Từ ngày ................ đến ngày ................</td>
               </tr>
               <tr>
                 <td colspan="2" style="border:none !important; padding:2px 0;"><b>GVBM:</b></td>
