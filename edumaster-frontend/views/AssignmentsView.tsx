@@ -856,14 +856,10 @@ const AssignmentsView: React.FC = () => {
             return `<th style="width:40px; font-size:10px; padding: 2px;"></th>`;
           }).join('');
 
-          // Empty cells to pad to SESSIONS_PER_PAGE
-          const emptySessionCells = Array(SESSIONS_PER_PAGE - sessionChunk.length)
-            .fill(`<th style="width:40px;"></th>`).join('');
-
           // Student rows
           const studentRows = studentChunk.map((s: any, idx: number) => {
             const globalIdx = sChunkIdx * STUDENTS_PER_PAGE + idx + 1;
-            const attendanceCells = Array(SESSIONS_PER_PAGE)
+            const attendanceCells = Array(sessionChunk.length)
               .fill(`<td style="background:#e8f5e9;"></td>`).join('');
             return `
               <tr>
@@ -951,11 +947,10 @@ const AssignmentsView: React.FC = () => {
                   <th rowspan="2" style="border:1px solid black; text-align:left; padding-left:4px; font-size:11px; vertical-align:middle;">HỌ VÀ TÊN</th>
                   <th style="border:1px solid black; text-align:center; font-size:11px; vertical-align:middle;">NGÀY/BUỔI</th>
                   ${sessionDateCells}
-                  ${emptySessionCells}
                 </tr>
                 <tr>
                   <td style="border:1px solid black; text-align:center; font-size:12px; font-weight:bold; height:24px;">SỐ TIẾT</td>
-                  ${Array(SESSIONS_PER_PAGE).fill(`<td style="border:1px solid black; background:#fff9c4;"></td>`).join('')}
+                  ${Array(sessionChunk.length).fill(`<td style="border:1px solid black; background:#fff9c4;"></td>`).join('')}
                 </tr>
               </thead>
               <tbody>
