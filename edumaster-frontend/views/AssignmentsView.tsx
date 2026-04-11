@@ -875,7 +875,7 @@ const AssignmentsView: React.FC = () => {
           const signatureHtml = isLastStudentChunk ? `
             <tr>
               <td colspan="3" style="text-align:center; font-size:11px; font-style:italic; height:30px;">Giáo viên ký</td>
-              ${Array(SESSIONS_PER_PAGE).fill(`<td style="background:#e8f5e9;"></td>`).join('')}
+              ${Array(sessionChunk.length).fill(`<td style="background:#e8f5e9;"></td>`).join('')}
               <td></td>
             </tr>` : '';
 
