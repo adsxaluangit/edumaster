@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { FileSpreadsheet, RefreshCw, Trash2, Plus, Search, Filter, ChevronDown, X, Camera, Save, Calendar, User, Upload, Check, Phone, MapPin, Briefcase, Flag, School, Edit3, Image as ImageIcon, FileText, CheckCircle2, XCircle, ShieldCheck, Printer } from 'lucide-react';
 import { Student } from '../types';
 import { MOCK_STUDENTS, MOCK_NATIONS, MOCK_CLASSES } from '../mockData';
-import { fetchCategory, createCategory, updateCategory, deleteCategory, COLLECTIONS } from '../services/api';
+import { fetchCategory, createCategory, updateCategory, deleteCategory, COLLECTIONS, uploadFile } from '../services/api';
 import { formatDate, parseToISO } from '../utils/dateUtils';
 
 // MOCK_STUDENTS loaded from mockData.ts
@@ -117,8 +117,8 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
       // Load Students (and Map)
       const [studentsRaw, decisionsRaw] = await Promise.all([
-        // Exclude photo and documents to prevent memory overflow
-        fetchCategory(`${COLLECTIONS.STUDENTS}?populate[school_class]=true&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=address&fields[9]=phone&fields[10]=is_approved&fields[11]=group&fields[12]=class_code&fields[13]=company&fields[14]=ethnicity&fields[15]=nationality`),
+        // Include photo again because it will now only store short URLs, not Base64!
+        fetchCategory(`${COLLECTIONS.STUDENTS}?populate[school_class]=true&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=address&fields[9]=phone&fields[10]=is_approved&fields[11]=group&fields[12]=class_code&fields[13]=company&fields[14]=ethnicity&fields[15]=nationality&fields[16]=photo`),
         fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?populate[students]=true&populate[school_class]=true`)
       ]);
 
@@ -485,6 +485,19 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
     const saveToApi = async () => {
       try {
+        let finalPhotoUrl = studentPhoto;
+        
+        // If photo is a newly captured Base64 string, upload it to Server Filesystem
+        if (studentPhoto && studentPhoto.startsWith('data:image/')) {
+          const uploadedInfo = await uploadFile(studentPhoto, `avatar_${formData.studentCode || Date.now()}.jpg`);
+          if (uploadedInfo && uploadedInfo.length > 0) {
+            // Strapi sets uploadedInfo[0].url. Make sure to get url!
+            finalPhotoUrl = uploadedInfo[0].url; 
+          }
+        }
+
+        payload.photo = finalPhotoUrl;
+
         if (editingId) {
           await updateCategory(COLLECTIONS.STUDENTS, editingId, payload);
         } else {

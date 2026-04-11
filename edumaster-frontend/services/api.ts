@@ -7,9 +7,14 @@ const strapiRequest = async (endpoint: string, options: RequestInit = {}) => {
     try {
         const token = localStorage.getItem('jwt_token');
         const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
             ...((options.headers as Record<string, string>) || {}),
         };
+        
+        // Add default Content-Type only if not FormData
+        if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+             headers['Content-Type'] = 'application/json';
+        }
+
 
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
@@ -243,6 +248,27 @@ export const deleteCategory = async (collectionName: string, id: string) => {
         method: 'DELETE',
     });
     return normalizeStrapiItem(json);
+};
+
+export const uploadFile = async (base64Data: string, filename: string) => {
+    try {
+        // Convert base64 to Blob
+        const res = await fetch(base64Data);
+        const blob = await res.blob();
+        
+        const formData = new FormData();
+        formData.append('files', blob, filename);
+        
+        const json = await strapiRequest('/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        return json; // Array of uploaded files info [{id, url, ...}]
+    } catch (e) {
+        console.error("Upload file failed", e);
+        return null;
+    }
 };
 
 // Mapping for collection names

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, X, List, Search, Trash2, Edit, UserPlus, Save, FileText, Calendar, Users, FileDown, GraduationCap, School, Paperclip, Upload, Printer, IdCard, FileSpreadsheet, History, Clock, ShieldCheck, ScrollText, Camera, Image as ImageIcon } from 'lucide-react';
 import { Student } from '../types';
-import { fetchCategory, createCategory, updateCategory, deleteCategory, COLLECTIONS, createLog } from '../services/api';
+import { fetchCategory, createCategory, updateCategory, deleteCategory, COLLECTIONS, createLog, uploadFile } from '../services/api';
 import ExcelJS from 'exceljs';
 import { formatDate, parseToISO } from '../utils/dateUtils';
 
@@ -425,8 +425,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   };
 
   const loadStudents = async () => {
-    // Exclude photo and documents Base64
-    const data = await fetchCategory(`${COLLECTIONS.STUDENTS}?populate[school_class]=true&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=address&fields[9]=phone&fields[10]=is_approved&fields[11]=group&fields[12]=class_code&fields[13]=company&fields[14]=ethnicity&fields[15]=nationality`);
+    // Include photo again because it will now only store short URLs, not Base64!
+    const data = await fetchCategory(`${COLLECTIONS.STUDENTS}?populate[school_class]=true&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=address&fields[9]=phone&fields[10]=is_approved&fields[11]=group&fields[12]=class_code&fields[13]=company&fields[14]=ethnicity&fields[15]=nationality&fields[16]=photo`);
     if (data) {
       setAllStudents(data.map((d: any) => {
         const classData = d.school_class?.data || d.school_class;
@@ -908,6 +908,15 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     if (window.confirm("Bạn có muốn cập nhật thông tin (bao gồm ảnh) vào Hồ sơ gốc (Quản lý học viên) không?")) {
       try {
         const studentId = editingStudentData.id;
+        
+        let finalPhotoUrl = editingStudentData.photo;
+        if (finalPhotoUrl && finalPhotoUrl.startsWith('data:image/')) {
+           const uploadedInfo = await uploadFile(finalPhotoUrl, `avatar_edit_${editingStudentData.studentCode || Date.now()}.jpg`);
+           if (uploadedInfo && uploadedInfo.length > 0) {
+              finalPhotoUrl = uploadedInfo[0].url;
+           }
+        }
+
         if (studentId) {
           await updateCategory('students', studentId, {
             full_name: editingStudentData.fullName.toUpperCase(),
@@ -915,7 +924,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
             card_number: editingStudentData.cardNumber,
             id_number: editingStudentData.cardNumber,
             pob: editingStudentData.hometown,
-            photo: editingStudentData.photo || null
+            photo: finalPhotoUrl || null
           });
           
           // Local sync
@@ -926,8 +935,12 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
             cardNumber: editingStudentData.cardNumber,
             idNumber: editingStudentData.cardNumber,
             pob: editingStudentData.hometown,
-            photo: editingStudentData.photo || null
+            photo: finalPhotoUrl || null
           } : s));
+          
+          // Also update the temp list with the uploaded URL so we don't hold base64 in RAM
+          newList[editingStudentIndex].photo = finalPhotoUrl || null;
+          setTempStudents([...newList]);
           
           console.log('Updated source student record successfully.');
         }
