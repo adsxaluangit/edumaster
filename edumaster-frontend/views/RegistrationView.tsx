@@ -116,6 +116,11 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
             return;
         }
 
+        if (!formData.classCode) {
+            alert('Vui lòng chọn lớp học muốn đăng ký!');
+            return;
+        }
+
         if (formData.idNumber.length !== 12) {
             alert('Vui lòng nhập chính xác 12 số CCCD/CMND!');
             return;
@@ -496,17 +501,25 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Đăng ký lớp học</label>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">
+                                        Đăng ký lớp học <span className="text-red-500">*</span>
+                                    </label>
                                     <select
                                         value={formData.classCode}
                                         onChange={e => setFormData({ ...formData, classCode: e.target.value })}
-                                        className="w-full px-4 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                        required
+                                        className={`w-full px-4 py-2 border rounded focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none ${
+                                            !formData.classCode ? 'border-red-400 bg-red-50' : 'border-slate-300'
+                                        }`}
                                     >
                                         <option value="">-- Chọn lớp muốn học --</option>
                                         {availableClasses.map(cls => (
                                             <option key={cls.id} value={cls.code}>{cls.name}</option>
                                         ))}
                                     </select>
+                                    {!formData.classCode && (
+                                        <p className="text-red-500 text-xs mt-1">※ Bắt buộc phải chọn lớp học</p>
+                                    )}
                                 </div>
 
                                 <div className="mb-4">
