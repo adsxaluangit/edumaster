@@ -2804,16 +2804,15 @@ có ảnh</span>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {allStudents.filter(s => {
+                  const isAlreadyAssigned = tempStudents.some(ts => String(ts.id) === String(s.id));
+                  if (isAlreadyAssigned) return false;
+
                   const matchSearch = s.fullName.toLowerCase().includes(searchStudent.toLowerCase()) ||
                     s.studentCode.toLowerCase().includes(searchStudent.toLowerCase());
-                  // In Opening mode, filter by selected class, EXCLUDE assigned students,
-                  // and ONLY show students who are approved (Đã duyệt)
-                  // In Recognition, show all (or could filter differently)
+                    
                   const matchClass = viewType === 'OPENING'
                     ? (
                         (s as any).classId === formData.classId &&
-                        // Note: Do NOT filter out assignedStudentIds — students can be in multiple decisions
-                        // (OPENING → RECOGNITION flow). Duplicate-within-same-decision is handled at save.
                         (s as any).isApproved === true
                       )
                     : true;
