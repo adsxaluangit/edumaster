@@ -1305,14 +1305,12 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         <table className="w-full text-left border-collapse min-w-[1200px] table-fixed">
           <thead className="bg-[#f8f9fa] sticky top-0 z-10 shadow-sm">
             <tr className="border-b border-slate-200 bg-white">
-              <th className="w-10 border-r px-2 py-2 text-center"><Filter size={14} className="text-slate-400 mx-auto" /></th>
-              <th className="w-10 border-r px-2 py-2 text-center"><input type="checkbox" onChange={e => e.target.checked ? setSelectedIds(new Set(filteredStudents.map(s => s.id))) : setSelectedIds(new Set())} checked={selectedIds.size === filteredStudents.length && filteredStudents.length > 0} /></th>
               <th className="w-16 border-r px-2 py-2 text-center text-[12px] font-bold text-slate-700">Ảnh (3x4)</th>
               <th className="w-32 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Mã HV (CCCD)</th>
               <th className="w-56 border-r px-3 py-2 text-[12px] font-bold text-slate-700">Họ và Tên</th>
               <th className="w-28 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Ngày sinh</th>
               <th className="w-20 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Giới tính</th>
-              <th className="w-56 border-r px-3 py-2 text-[12px] font-bold text-slate-700">Lớp học</th>
+              <th className="w-80 border-r px-3 py-2 text-[12px] font-bold text-slate-700">Lớp học</th>
               <th className="w-28 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Điện thoại</th>
               <th className="w-24 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Hồ sơ HV</th>
               <th className="w-28 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Trạng thái</th>
@@ -1321,9 +1319,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
           </thead>
           <tbody className="bg-white">
             {filteredStudents.map((s) => (
-              <tr key={s.id} className={`border-b hover:bg-[#e3f2fd] transition-colors text-[12px] ${selectedIds.has(s.id) ? 'bg-[#bbdefb]' : ''}`} onClick={() => setSelectedIds(prev => { const next = new Set(prev); if (next.has(s.id)) next.delete(s.id); else next.add(s.id); return next; })}>
-                <td className="border-r px-2 py-1.5 text-center"><ChevronDown size={14} className="text-slate-400 mx-auto -rotate-90" /></td>
-                <td className="border-r px-2 py-1.5 text-center"><input type="checkbox" checked={selectedIds.has(s.id)} onChange={e => { e.stopPropagation(); setSelectedIds(prev => { const next = new Set(prev); if (next.has(s.id)) next.delete(s.id); else next.add(s.id); return next; }); }} /></td>
+              <tr key={s.id} className="border-b hover:bg-[#e3f2fd] transition-colors text-[12px]">
                 <td className="border-r px-2 py-1.5 text-center">
                   <div className="w-[36px] h-[48px] mx-auto rounded overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center shadow-sm">
                     {s.photo ? (
@@ -1375,7 +1371,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
             ))}
             {filteredStudents.length === 0 && (
               <tr>
-                <td colSpan={12} className="py-20 text-center text-slate-400 italic">Không tìm thấy học viên nào phù hợp với từ khóa "{searchTerm}"</td>
+                <td colSpan={10} className="py-20 text-center text-slate-400 italic">Không tìm thấy học viên nào phù hợp với từ khóa "{searchTerm}"</td>
               </tr>
             )}
           </tbody>
