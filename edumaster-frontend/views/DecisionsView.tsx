@@ -609,9 +609,10 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         const classStudents = allStudents.filter(s => {
           const sClassId = String((s as any).classId || '');
           const matchesClass = sClassId === selectedId || (selectedNumericId && sClassId === selectedNumericId);
-          const notAssigned = !assignedStudentIds.has(s.id);
           const approved = (s as any).isApproved === true;
-          return matchesClass && notAssigned && approved;
+          // Note: Do NOT filter out assignedStudentIds here — students may need to be in multiple decisions
+          // (e.g., OPENING then RECOGNITION). Duplicate check within the same decision is handled separately.
+          return matchesClass && approved;
         });
         console.log('[DEBUG] classStudents found:', classStudents.length, 'approved students for class', selectedId);
         const mappedStudents: DecisionDetail[] = classStudents.map((s, idx) => ({
@@ -2771,7 +2772,8 @@ có ảnh</span>
                   const matchClass = viewType === 'OPENING'
                     ? (
                         (s as any).classId === formData.classId &&
-                        !assignedStudentIds.has(s.id) &&
+                        // Note: Do NOT filter out assignedStudentIds — students can be in multiple decisions
+                        // (OPENING → RECOGNITION flow). Duplicate-within-same-decision is handled at save.
                         (s as any).isApproved === true
                       )
                     : true;

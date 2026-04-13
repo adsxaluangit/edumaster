@@ -130,8 +130,11 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       }
 
       // Fetch both concurrently to avoid UI flash (race condition)
+      // When filtering by class: use normal API (show ALL students in that class, including assigned)
+      // When no class filter: use unassigned endpoint (inbox pool — only unassigned students)
+      const studentEndpoint = selectedClassFilter ? COLLECTIONS.STUDENTS : 'students/unassigned';
       const [res, decisionsRaw] = await Promise.all([
-        fetchCategoryPaginated('students/unassigned', currentPage, pageSize, filters, customParams),
+        fetchCategoryPaginated(studentEndpoint, currentPage, pageSize, filters, customParams),
         fetchCategory(COLLECTIONS.CLASS_DECISIONS)
       ]);
 
