@@ -453,7 +453,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
           group: classData?.attributes?.name || classData?.name || '',
           className: classData?.attributes?.name || classData?.name || '',
           classCode: classData?.attributes?.code || classData?.code || '',
-          classId: String(classData?.id || ''),
+          classId: String(classData?.documentId || classData?.id || ''),
           isApproved: !!d.is_approved,
           documents: [],
           photo: null
@@ -1004,6 +1004,46 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       } catch (e) {
         alert("Mở khóa thất bại.");
       }
+    }
+  };
+
+  const handleOpenEditDecision = (d: DecisionRecord, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    
+    if (checkIfLocked(d.id) && !e) {
+      alert("Quyết định này đã bị khóa (Đã có QĐ Công nhận). Bạn chỉ có thể xem, không thể sửa.");
+    }
+    
+    setEditingId(d.id);
+    setFormData({
+      number: d.number, signedDate: d.signedDate, signer: d.signer,
+      location: d.location, company: d.company, classType: d.classType,
+      classCode: d.classCode, className: d.className, trainingCourse: d.trainingCourse, notes: d.notes, classId: d.classId || '', relatedOpeningId: d.relatedOpeningId || '', startIndex: '1'
+    });
+    setTempStudents(d.students || []);
+    setIsFormOpen(true);
+
+    if (d.type === 'OPENING' && d.classId) {
+      setLoading(true);
+      loadStudentsByClass(d.classId).then(classStudents => {
+        const approvedStudents = classStudents.filter(s => (s as any).isApproved === true);
+        setAllStudents(approvedStudents);
+        setLoading(false);
+      });
+    }
+  };
+
+  const handleOpenAddStudentModal = () => {
+    if (viewType === 'OPENING' && formData.classId) {
+      setLoading(true);
+      loadStudentsByClass(formData.classId).then(classStudents => {
+        const approvedStudents = classStudents.filter(s => (s as any).isApproved === true);
+        setAllStudents(approvedStudents);
+        setLoading(false);
+        setIsAddStudentModalOpen(true);
+      });
+    } else {
+      setIsAddStudentModalOpen(true);
     }
   };
 
@@ -1724,6 +1764,21 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Danh sách học viên');
 
+      const exportSortedStudents = [...tempStudents].filter(s => s.fullName && s.fullName.trim() !== '').sort((a, b) => {
+        const getParts = (name: string) => {
+          const parts = (name || '').trim().split(/\s+/);
+          const first = parts.length > 1 ? (parts.pop() || '') : (parts[0] || '');
+          const last = parts.join(' ');
+          return { first: first.toLowerCase(), last: last.toLowerCase() };
+        };
+        const nameA = getParts(a.fullName);
+        const nameB = getParts(b.fullName);
+        return (
+          nameA.first.localeCompare(nameB.first, 'vi', { sensitivity: 'base' }) ||
+          nameA.last.localeCompare(nameB.last, 'vi', { sensitivity: 'base' })
+        );
+      });
+
       if (viewType === 'RECOGNITION') {
         worksheet.mergeCells('A1:C1');
         worksheet.getCell('A1').value = 'TRƯỜNG CAO ĐẲNG';
@@ -1790,8 +1845,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         });
 
         let currentRow = 9;
-        for (let i = 0; i < tempStudents.length; i++) {
-          const s = tempStudents[i];
+        for (let i = 0; i < exportSortedStudents.length; i++) {
+          const s = exportSortedStudents[i];
           
           const row = worksheet.getRow(currentRow);
           row.height = 18;
@@ -1819,7 +1874,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         for (let i = 0; i < 3; i++) {
           const row = worksheet.getRow(currentRow);
           row.height = 18;
-          row.getCell(1).value = tempStudents.length + i + 1;
+          row.getCell(1).value = exportSortedStudents.length + i + 1;
           for (let c = 1; c <= 6; c++) {
             const cell = row.getCell(c);
             cell.font = { name: 'Times New Roman', size: 11 };
@@ -1905,8 +1960,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         worksheet.getCell('C5').border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
 
         let currentRow = 6;
-        for (let i = 0; i < tempStudents.length; i++) {
-          const s = tempStudents[i];
+        for (let i = 0; i < exportSortedStudents.length; i++) {
+          const s = exportSortedStudents[i];
           const parts = s.fullName.trim().split(' ');
           const ten = parts.pop() || '';
           const ho = parts.join(' ');
@@ -2486,7 +2541,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
               <div className="text-[12px] font-black text-slate-400 uppercase tracking-widest pl-2">Danh sách chính thức</div>
               {currentUser?.role === UserRole.ADMIN && (
                 <button
-                  onClick={() => setIsAddStudentModalOpen(true)}
+                  onClick={handleOpenAddStudentModal}
                   className="bg-slate-800 text-white px-4 py-1.5 rounded text-[11px] font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors shadow-sm"
                 >
                   <Plus size={14} /> Thêm thủ công
@@ -2764,16 +2819,15 @@ có ảnh</span>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {allStudents.filter(s => {
+                  const isAlreadyAssigned = tempStudents.some(ts => String(ts.id) === String(s.id));
+                  if (isAlreadyAssigned) return false;
+
                   const matchSearch = s.fullName.toLowerCase().includes(searchStudent.toLowerCase()) ||
                     s.studentCode.toLowerCase().includes(searchStudent.toLowerCase());
-                  // In Opening mode, filter by selected class, EXCLUDE assigned students,
-                  // and ONLY show students who are approved (Đã duyệt)
-                  // In Recognition, show all (or could filter differently)
+                    
                   const matchClass = viewType === 'OPENING'
                     ? (
                         (s as any).classId === formData.classId &&
-                        // Note: Do NOT filter out assignedStudentIds — students can be in multiple decisions
-                        // (OPENING → RECOGNITION flow). Duplicate-within-same-decision is handled at save.
                         (s as any).isApproved === true
                       )
                     : true;
@@ -3078,17 +3132,7 @@ có ảnh</span>
                           {!checkIfLocked(d.id) && (
                             <>
                               <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingId(d.id);
-                                  setFormData({
-                                    number: d.number, signedDate: d.signedDate, signer: d.signer,
-                                    location: d.location, company: d.company, classType: d.classType,
-                                    classCode: d.classCode, className: d.className, trainingCourse: d.trainingCourse, notes: d.notes, classId: d.classId || '', relatedOpeningId: d.relatedOpeningId || '', startIndex: '1'
-                                  });
-                                  setTempStudents(d.students || []);
-                                  setIsFormOpen(true);
-                                }}
+                                onClick={(e) => handleOpenEditDecision(d, e)}
                                 className="p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm shadow-blue-100"
                                 title="Sửa quyết định"
                               >
