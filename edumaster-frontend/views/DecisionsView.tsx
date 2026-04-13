@@ -449,7 +449,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
           group: classData?.attributes?.name || classData?.name || d.group || '',
           className: classData?.attributes?.name || classData?.name || d.class_name || '',
           classCode: classData?.attributes?.code || classData?.code || d.class_code || '',
-          classId: String(classData?.documentId || classData?.id || ''),
+          classId: String(classData?.id || classData?.strapiId || ''),
           isApproved: !!d.is_approved,
           documents: [],
           photo: d.photo || null
@@ -587,14 +587,16 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       return;
     }
 
-    if (viewType === 'OPENING') {
-      const selectedClass = availableClasses.find(c => String(c.documentId || c.id) === selectedId);
+      // value from dropdown is c.id (numeric), find class by that
+      const selectedClass = availableClasses.find(c => String(c.id) === selectedId || String(c.strapiId) === selectedId);
       if (selectedClass) {
+        // Store numeric id as classId for consistent matching with student.classId
+        const numericClassId = String(selectedClass.id || selectedClass.strapiId || '');
         setFormData({
           ...formData,
           className: selectedClass.name || selectedClass.attributes?.name || '',
           classCode: selectedClass.code || selectedClass.attributes?.code || '',
-          classId: String(selectedClass.strapiId || selectedClass.id)
+          classId: numericClassId
         });
 
         // Auto-populate students from this class, EXCLUDING already assigned students

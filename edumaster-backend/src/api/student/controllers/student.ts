@@ -28,6 +28,8 @@ export default factories.createCoreController('api::student.student', ({ strapi 
 
       if (filters && typeof filters === 'object') {
         const anyFilters = filters as any;
+
+        // Handle text search: filters[$or][0][full_name][$containsi] or filters[$or][1][id_number][$contains]
         if (anyFilters['$or'] && Array.isArray(anyFilters['$or'])) {
            const orFilter = anyFilters['$or'];
            let term = '';
@@ -43,8 +45,19 @@ export default factories.createCoreController('api::student.student', ({ strapi 
              });
            }
         }
+
+        // Handle old group filter (kept for backward compat)
         if (anyFilters['group'] && anyFilters['group']['$eq']) {
            baseQuery = baseQuery.where('students.group', anyFilters['group']['$eq']);
+        }
+
+        // Handle school_class.name filter: filters[school_class][name][$eq]=ClassName
+        if (anyFilters['school_class'] && anyFilters['school_class']['name'] && anyFilters['school_class']['name']['$eq']) {
+           const className = anyFilters['school_class']['name']['$eq'];
+           baseQuery = baseQuery
+             .join('students_school_class_lnk as sc_lnk', 'students.id', 'sc_lnk.student_id')
+             .join('classes as cls', 'cls.id', 'sc_lnk.school_class_id')
+             .where('cls.name', className);
         }
       }
 

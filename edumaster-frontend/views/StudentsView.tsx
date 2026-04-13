@@ -93,7 +93,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       group: classObj?.name || data.group || '', // Prefer relation name
       classCode: classObj?.code || data.class_code || '',
       className: classObj?.name || data.class_name || '',
-      classId: classObj?.documentId || classObj?.id || '',
+      classId: String(classObj?.id || ''),
       cardNumber: data.card_number || '', // If used
       isApproved: data.is_approved || false,
       notes: data.notes || '',
@@ -126,7 +126,9 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
          filters = `filters[$or][0][full_name][$containsi]=${encodeURIComponent(searchTermServer)}&filters[$or][1][id_number][$contains]=${encodeURIComponent(searchTermServer)}`;
       }
       if (selectedClassFilter) {
-         filters += (filters ? '&' : '') + `filters[group][$eq]=${encodeURIComponent(selectedClassFilter)}`;
+         // Filter through the school_class relation using class name
+         // (most students have empty 'group' text field; data is in school_class relation)
+         filters += (filters ? '&' : '') + `filters[school_class][name][$eq]=${encodeURIComponent(selectedClassFilter)}`;
       }
 
       // Fetch both concurrently to avoid UI flash (race condition)
