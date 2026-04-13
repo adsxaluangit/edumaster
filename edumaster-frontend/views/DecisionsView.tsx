@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, X, List, Search, Trash2, Edit, UserPlus, Save, FileText, Calendar, Users, FileDown, GraduationCap, School, Paperclip, Upload, Printer, IdCard, FileSpreadsheet, History, Clock, ShieldCheck, ScrollText, Camera, Image as ImageIcon } from 'lucide-react';
 import { Student } from '../types';
-import { fetchCategory, createCategory, updateCategory, deleteCategory, COLLECTIONS, createLog, uploadFile } from '../services/api';
+import { fetchCategory, fetchCategoryAll, createCategory, updateCategory, deleteCategory, COLLECTIONS, createLog, uploadFile } from '../services/api';
 import ExcelJS from 'exceljs';
 import { formatDate, parseToISO } from '../utils/dateUtils';
 
@@ -425,8 +425,10 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   };
 
   const loadStudents = async () => {
-    // Include photo again because it will now only store short URLs, not Base64!
-    const data = await fetchCategory(`${COLLECTIONS.STUDENTS}?populate[school_class]=true&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=address&fields[9]=phone&fields[10]=is_approved&fields[11]=group&fields[12]=class_code&fields[13]=company&fields[14]=ethnicity&fields[15]=nationality&fields[16]=photo`);
+    // Use the optimized all-brief endpoint: direct SQL, minimal fields, no N+1 queries
+    // Much faster than the standard Strapi API for large datasets
+    const briefParams = `populate[school_class]=true&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=group&fields[9]=class_code&fields[10]=is_approved&fields[11]=company&fields[12]=phone`;
+    const data = await fetchCategoryAll(COLLECTIONS.STUDENTS, briefParams);
     if (data) {
       setAllStudents(data.map((d: any) => {
         const classData = d.school_class?.data || d.school_class;
@@ -449,12 +451,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
           classCode: classData?.attributes?.code || classData?.code || d.class_code || '',
           classId: String(classData?.documentId || classData?.id || ''),
           isApproved: !!d.is_approved,
-          documents: (Array.isArray(d.documents) ? d.documents : d.documents?.data || []).map((doc: any) => ({
-            id: doc.documentId || doc.id,
-            name: doc.attributes?.name || doc.name,
-            url: doc.attributes?.url || doc.url,
-            type: doc.attributes?.mime || doc.type || 'application/pdf'
-          })),
+          documents: [],
           photo: d.photo || null
         } as Student;
       }));

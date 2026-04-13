@@ -204,6 +204,36 @@ export const fetchCategoryPaginated = async (collectionName: string, page: numbe
     };
 };
 
+// Fetch all pages of a collection in parallel — use for small-to-medium collections needing full data
+// Uses large page size to minimize round trips
+export const fetchCategoryAll = async (collectionName: string, customParams: string = 'populate=*') => {
+    // First request: get total count
+    const firstEndpoint = `/${collectionName}?${customParams}&pagination[page]=1&pagination[pageSize]=200&publicationState=preview`;
+    const firstJson = await strapiRequest(firstEndpoint);
+    const total = firstJson?.meta?.pagination?.total || 0;
+    const pageSize = 200;
+    const pageCount = Math.ceil(total / pageSize);
+
+    // Collect first page result
+    const firstData = normalizeStrapiList(firstJson);
+
+    if (pageCount <= 1) return firstData;
+
+    // Fetch remaining pages in parallel
+    const remainingRequests = [];
+    for (let page = 2; page <= pageCount; page++) {
+        remainingRequests.push(
+            strapiRequest(`/${collectionName}?${customParams}&pagination[page]=${page}&pagination[pageSize]=${pageSize}&publicationState=preview`)
+        );
+    }
+    const remainingResults = await Promise.all(remainingRequests);
+    const allData = [
+        ...firstData,
+        ...remainingResults.flatMap(json => normalizeStrapiList(json))
+    ];
+    return allData;
+};
+
 export const fetchItem = async (collectionName: string, id: string | number) => {
     const endpoint = `/${collectionName}/${id}?populate=*`;
     const json = await strapiRequest(endpoint);
