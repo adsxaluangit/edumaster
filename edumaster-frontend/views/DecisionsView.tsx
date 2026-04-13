@@ -610,7 +610,13 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         // This avoids loading 500k+ students into browser memory
         setLoading(true);
         loadStudentsByClass(numericClassId).then(classStudents => {
-          const approvedStudents = classStudents.filter(s => (s as any).isApproved === true);
+          // Only include students who are approved AND not already assigned to another opening decision
+          const approvedStudents = classStudents.filter(s => {
+            const isApproved = (s as any).isApproved === true;
+            const isAlreadyAssigned = assignedStudentIds.has(String(s.id)) || assignedStudentIds.has(String((s as any).strapiId));
+            return isApproved && !isAlreadyAssigned;
+          });
+          
           const mappedStudents: DecisionDetail[] = approvedStudents.map((s, idx) => ({
             id: s.id,
             stt: idx + 1,
@@ -1037,7 +1043,15 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     if (viewType === 'OPENING' && formData.classId) {
       setLoading(true);
       loadStudentsByClass(formData.classId).then(classStudents => {
-        const approvedStudents = classStudents.filter(s => (s as any).isApproved === true);
+        // filter out unapproved AND currently assigned students to OTHER opening decisions
+        const approvedStudents = classStudents.filter(s => {
+          const isApproved = (s as any).isApproved === true;
+          // Note: When editing, assignedStudentIds currently includes the current decision's students too.
+          // BUT the add modal shouldn't show students that are already in tempStudents anyway.
+          const isAlreadyAssigned = assignedStudentIds.has(String(s.id)) || assignedStudentIds.has(String((s as any).strapiId));
+          const isAlreadyInThisDecision = tempStudents.some(ts => String(ts.id) === String(s.id) || String(ts.id) === String((s as any).strapiId));
+          return isApproved && (!isAlreadyAssigned || isAlreadyInThisDecision);
+        });
         setAllStudents(approvedStudents);
         setLoading(false);
         setIsAddStudentModalOpen(true);
