@@ -426,8 +426,6 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     if (data) setAvailableClasses(data);
   };
 
-  };
-
   // Load students for a SPECIFIC class only (lazy loading for scalability)
   // Called only when user selects a class in OPENING form
   // This scales to 500k+ students because we only fetch students for one class at a time
