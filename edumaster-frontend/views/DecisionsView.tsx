@@ -429,9 +429,9 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   // Load students for a SPECIFIC class only (lazy loading for scalability)
   // Called only when user selects a class in OPENING form
   // This scales to 500k+ students because we only fetch students for one class at a time
-  const loadStudentsByClass = async (classNumericId: string): Promise<Student[]> => {
+  const loadStudentsByClass = async (classDocId: string): Promise<Student[]> => {
     try {
-      const params = `filters[school_class][id][$eq]=${classNumericId}&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=is_approved&fields[9]=company&fields[10]=phone&populate[school_class]=true&pagination[pageSize]=500`;
+      const params = `filters[school_class][documentId][$eq]=${classDocId}&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=is_approved&fields[9]=company&fields[10]=phone&populate[school_class]=true&pagination[pageSize]=500`;
       const data = await fetchCategory(`${COLLECTIONS.STUDENTS}?${params}`);
       if (!data) return [];
       return data.map((d: any) => {
