@@ -453,7 +453,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
           group: classData?.attributes?.name || classData?.name || '',
           className: classData?.attributes?.name || classData?.name || '',
           classCode: classData?.attributes?.code || classData?.code || '',
-          classId: String(classData?.id || ''),
+          classId: String(classData?.documentId || classData?.id || ''),
           isApproved: !!d.is_approved,
           documents: [],
           photo: null
@@ -1004,6 +1004,46 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       } catch (e) {
         alert("Mở khóa thất bại.");
       }
+    }
+  };
+
+  const handleOpenEditDecision = (d: DecisionRecord, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    
+    if (checkIfLocked(d.id) && !e) {
+      alert("Quyết định này đã bị khóa (Đã có QĐ Công nhận). Bạn chỉ có thể xem, không thể sửa.");
+    }
+    
+    setEditingId(d.id);
+    setFormData({
+      number: d.number, signedDate: d.signedDate, signer: d.signer,
+      location: d.location, company: d.company, classType: d.classType,
+      classCode: d.classCode, className: d.className, trainingCourse: d.trainingCourse, notes: d.notes, classId: d.classId || '', relatedOpeningId: d.relatedOpeningId || '', startIndex: '1'
+    });
+    setTempStudents(d.students || []);
+    setIsFormOpen(true);
+
+    if (d.type === 'OPENING' && d.classId) {
+      setLoading(true);
+      loadStudentsByClass(d.classId).then(classStudents => {
+        const approvedStudents = classStudents.filter(s => (s as any).isApproved === true);
+        setAllStudents(approvedStudents);
+        setLoading(false);
+      });
+    }
+  };
+
+  const handleOpenAddStudentModal = () => {
+    if (viewType === 'OPENING' && formData.classId) {
+      setLoading(true);
+      loadStudentsByClass(formData.classId).then(classStudents => {
+        const approvedStudents = classStudents.filter(s => (s as any).isApproved === true);
+        setAllStudents(approvedStudents);
+        setLoading(false);
+        setIsAddStudentModalOpen(true);
+      });
+    } else {
+      setIsAddStudentModalOpen(true);
     }
   };
 
@@ -2486,7 +2526,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
               <div className="text-[12px] font-black text-slate-400 uppercase tracking-widest pl-2">Danh sách chính thức</div>
               {currentUser?.role === UserRole.ADMIN && (
                 <button
-                  onClick={() => setIsAddStudentModalOpen(true)}
+                  onClick={handleOpenAddStudentModal}
                   className="bg-slate-800 text-white px-4 py-1.5 rounded text-[11px] font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors shadow-sm"
                 >
                   <Plus size={14} /> Thêm thủ công
@@ -3078,17 +3118,7 @@ có ảnh</span>
                           {!checkIfLocked(d.id) && (
                             <>
                               <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingId(d.id);
-                                  setFormData({
-                                    number: d.number, signedDate: d.signedDate, signer: d.signer,
-                                    location: d.location, company: d.company, classType: d.classType,
-                                    classCode: d.classCode, className: d.className, trainingCourse: d.trainingCourse, notes: d.notes, classId: d.classId || '', relatedOpeningId: d.relatedOpeningId || '', startIndex: '1'
-                                  });
-                                  setTempStudents(d.students || []);
-                                  setIsFormOpen(true);
-                                }}
+                                onClick={(e) => handleOpenEditDecision(d, e)}
                                 className="p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm shadow-blue-100"
                                 title="Sửa quyết định"
                               >
