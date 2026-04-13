@@ -242,9 +242,17 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                 setIsSuccess(false);
                                 setFormData({ ...formData, classCode: '' });
                             }}
+                            className="px-6 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700 transition-colors shadow-sm"
+                        >
+                            Đăng ký lớp mới
+                        </button>
+                        <button
+                            onClick={() => {
+                                window.location.href = 'https://mic1.edu.vn';
+                            }}
                             className="px-6 py-2 bg-slate-100 text-slate-700 font-bold rounded hover:bg-slate-200 transition-colors"
                         >
-                            Đăng ký mới
+                            Thoát
                         </button>
                     </div>
                 </div>
