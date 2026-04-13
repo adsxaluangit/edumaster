@@ -1764,6 +1764,21 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Danh sách học viên');
 
+      const exportSortedStudents = [...tempStudents].filter(s => s.fullName && s.fullName.trim() !== '').sort((a, b) => {
+        const getParts = (name: string) => {
+          const parts = (name || '').trim().split(/\s+/);
+          const first = parts.length > 1 ? (parts.pop() || '') : (parts[0] || '');
+          const last = parts.join(' ');
+          return { first: first.toLowerCase(), last: last.toLowerCase() };
+        };
+        const nameA = getParts(a.fullName);
+        const nameB = getParts(b.fullName);
+        return (
+          nameA.first.localeCompare(nameB.first, 'vi', { sensitivity: 'base' }) ||
+          nameA.last.localeCompare(nameB.last, 'vi', { sensitivity: 'base' })
+        );
+      });
+
       if (viewType === 'RECOGNITION') {
         worksheet.mergeCells('A1:C1');
         worksheet.getCell('A1').value = 'TRƯỜNG CAO ĐẲNG';
@@ -1830,8 +1845,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         });
 
         let currentRow = 9;
-        for (let i = 0; i < tempStudents.length; i++) {
-          const s = tempStudents[i];
+        for (let i = 0; i < exportSortedStudents.length; i++) {
+          const s = exportSortedStudents[i];
           
           const row = worksheet.getRow(currentRow);
           row.height = 18;
@@ -1859,7 +1874,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         for (let i = 0; i < 3; i++) {
           const row = worksheet.getRow(currentRow);
           row.height = 18;
-          row.getCell(1).value = tempStudents.length + i + 1;
+          row.getCell(1).value = exportSortedStudents.length + i + 1;
           for (let c = 1; c <= 6; c++) {
             const cell = row.getCell(c);
             cell.font = { name: 'Times New Roman', size: 11 };
@@ -1945,8 +1960,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         worksheet.getCell('C5').border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
 
         let currentRow = 6;
-        for (let i = 0; i < tempStudents.length; i++) {
-          const s = tempStudents[i];
+        for (let i = 0; i < exportSortedStudents.length; i++) {
+          const s = exportSortedStudents[i];
           const parts = s.fullName.trim().split(' ');
           const ten = parts.pop() || '';
           const ho = parts.join(' ');
