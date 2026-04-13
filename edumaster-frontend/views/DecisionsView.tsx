@@ -3000,21 +3000,21 @@ có ảnh</span>
               </p>
             </div>
           </div>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <button onClick={() => { setIsAuditModalOpen(true); loadAuditLogs(); }} className="bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 px-4 py-2.5 rounded-xl font-bold flex gap-2 shadow-sm transition-all">
-            <History size={20} /> Lịch sử
-          </button>
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => { setIsAuditModalOpen(true); loadAuditLogs(); }} className="bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 px-4 py-2.5 rounded-xl font-bold flex gap-2 shadow-sm transition-all">
+              <History size={20} /> Lịch sử
+            </button>
 
-          <button onClick={() => {
-            setEditingId(null);
-            setFormData({
-              number: '', signedDate: new Date().toISOString().split('T')[0], signer: 'HIỆU TRƯỞNG',
-              location: FIXED_LOCATION, company: '', classType: '', classCode: '', className: '', trainingCourse: '', notes: '', classId: '', relatedOpeningId: '', startIndex: '1'
-            });
-            setTempStudents([]);
-            setIsFormOpen(true);
-          }} className={`${viewType === 'OPENING' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'} text-white px-5 py-2.5 rounded-xl font-bold flex gap-2 shadow-lg transition-all`}><Plus /> Tạo mới</button>
+            <button onClick={() => {
+              setEditingId(null);
+              setFormData({
+                number: '', signedDate: new Date().toISOString().split('T')[0], signer: 'HIỆU TRƯỞNG',
+                location: FIXED_LOCATION, company: '', classType: '', classCode: '', className: '', trainingCourse: '', notes: '', classId: '', relatedOpeningId: '', startIndex: '1'
+              });
+              setTempStudents([]);
+              setIsFormOpen(true);
+            }} className={`${viewType === 'OPENING' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'} text-white px-5 py-2.5 rounded-xl font-bold flex gap-2 shadow-lg transition-all`}><Plus /> Tạo mới</button>
+          </div>
         </div>
       </div>
 
