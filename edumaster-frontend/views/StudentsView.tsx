@@ -1307,15 +1307,13 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
             <tr className="border-b border-slate-200 bg-white">
               <th className="w-10 border-r px-2 py-2 text-center"><Filter size={14} className="text-slate-400 mx-auto" /></th>
               <th className="w-10 border-r px-2 py-2 text-center"><input type="checkbox" onChange={e => e.target.checked ? setSelectedIds(new Set(filteredStudents.map(s => s.id))) : setSelectedIds(new Set())} checked={selectedIds.size === filteredStudents.length && filteredStudents.length > 0} /></th>
-              <th className="w-12 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">STT</th>
               <th className="w-16 border-r px-2 py-2 text-center text-[12px] font-bold text-slate-700">Ảnh (3x4)</th>
               <th className="w-32 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Mã HV (CCCD)</th>
-              <th className="w-48 border-r px-3 py-2 text-[12px] font-bold text-slate-700">Họ và Tên</th>
-              <th className="w-32 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Ngày sinh</th>
-              <th className="w-24 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Giới tính</th>
-              <th className="w-48 border-r px-3 py-2 text-[12px] font-bold text-slate-700">Lớp học</th>
-
-              <th className="w-32 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Điện thoại</th>
+              <th className="w-56 border-r px-3 py-2 text-[12px] font-bold text-slate-700">Họ và Tên</th>
+              <th className="w-28 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Ngày sinh</th>
+              <th className="w-20 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Giới tính</th>
+              <th className="w-56 border-r px-3 py-2 text-[12px] font-bold text-slate-700">Lớp học</th>
+              <th className="w-28 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Điện thoại</th>
               <th className="w-24 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Hồ sơ HV</th>
               <th className="w-28 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Trạng thái</th>
               <th className="w-24 px-3 py-2 text-center text-[12px] font-bold text-slate-700">Thao tác</th>
@@ -1326,7 +1324,6 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
               <tr key={s.id} className={`border-b hover:bg-[#e3f2fd] transition-colors text-[12px] ${selectedIds.has(s.id) ? 'bg-[#bbdefb]' : ''}`} onClick={() => setSelectedIds(prev => { const next = new Set(prev); if (next.has(s.id)) next.delete(s.id); else next.add(s.id); return next; })}>
                 <td className="border-r px-2 py-1.5 text-center"><ChevronDown size={14} className="text-slate-400 mx-auto -rotate-90" /></td>
                 <td className="border-r px-2 py-1.5 text-center"><input type="checkbox" checked={selectedIds.has(s.id)} onChange={e => { e.stopPropagation(); setSelectedIds(prev => { const next = new Set(prev); if (next.has(s.id)) next.delete(s.id); else next.add(s.id); return next; }); }} /></td>
-                <td className="border-r px-3 py-1.5 text-center text-slate-500">{s.stt}</td>
                 <td className="border-r px-2 py-1.5 text-center">
                   <div className="w-[36px] h-[48px] mx-auto rounded overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center shadow-sm">
                     {s.photo ? (
@@ -1343,7 +1340,6 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                 </td>
                 <td className="border-r px-3 py-1.5 text-center">{s.gender}</td>
                 <td className="border-r px-3 py-1.5 font-medium text-indigo-700 truncate">{s.group}</td>
-
                 <td className="border-r px-3 py-1.5 text-center">{s.phone || '--'}</td>
                 <td className="border-r px-3 py-1.5 text-center">
                   <div className="flex flex-col items-center gap-1">
@@ -1379,7 +1375,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
             ))}
             {filteredStudents.length === 0 && (
               <tr>
-                <td colSpan={11} className="py-20 text-center text-slate-400 italic">Không tìm thấy học viên nào phù hợp với từ khóa "{searchTerm}"</td>
+                <td colSpan={12} className="py-20 text-center text-slate-400 italic">Không tìm thấy học viên nào phù hợp với từ khóa "{searchTerm}"</td>
               </tr>
             )}
           </tbody>
