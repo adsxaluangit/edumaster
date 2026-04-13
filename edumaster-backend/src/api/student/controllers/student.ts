@@ -17,13 +17,16 @@ export default factories.createCoreController('api::student.student', ({ strapi 
 
       const knex = strapi.db.connection;
       
+      // NOT EXISTS is much faster than NOT IN at large scale (500k+ rows)
+      // NOT IN: O(n*m) scan; NOT EXISTS: O(n*log m) with index
       let baseQuery = knex('students')
-        .whereNotIn('students.id', function() {
-          this.select('class_decisions_students_lnk.student_id')
-            .from('class_decisions_students_lnk')
-            .join('class_decisions', 'class_decisions.id', 'class_decisions_students_lnk.class_decision_id')
-            .whereIn('class_decisions.type', ['OPENING', 'RECOGNITION'])
-            .whereNotNull('class_decisions_students_lnk.student_id');
+        .whereNotExists(function() {
+          this.select(knex.raw('1'))
+            .from('class_decisions_students_lnk as lnk')
+            .join('class_decisions as cd', 'cd.id', 'lnk.class_decision_id')
+            .whereRaw('lnk.student_id = students.id')
+            .whereIn('cd.type', ['OPENING', 'RECOGNITION'])
+            .whereNotNull('lnk.student_id');
         });
 
       if (filters && typeof filters === 'object') {

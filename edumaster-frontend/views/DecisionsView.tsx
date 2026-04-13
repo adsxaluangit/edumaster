@@ -346,7 +346,9 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       await Promise.all([
         loadDecisions(),
         loadClasses(),
-        loadStudents(),
+        // NOTE: loadStudents() removed — we no longer pre-load ALL students at startup.
+        // At 500k records this would: send 500k rows over network, freeze browser rendering.
+        // Students are now loaded lazily per-class in handleTypeLinkSelect().
         loadExamGrades(),
         loadTemplates(),
         loadAssignments()
@@ -424,37 +426,44 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     if (data) setAvailableClasses(data);
   };
 
-  const loadStudents = async () => {
-    // Use the optimized all-brief endpoint: direct SQL, minimal fields, no N+1 queries
-    // Much faster than the standard Strapi API for large datasets
-    const briefParams = `populate[school_class]=true&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=group&fields[9]=class_code&fields[10]=is_approved&fields[11]=company&fields[12]=phone`;
-    const data = await fetchCategoryAll(COLLECTIONS.STUDENTS, briefParams);
-    if (data) {
-      setAllStudents(data.map((d: any) => {
+  };
+
+  // Load students for a SPECIFIC class only (lazy loading for scalability)
+  // Called only when user selects a class in OPENING form
+  // This scales to 500k+ students because we only fetch students for one class at a time
+  const loadStudentsByClass = async (classNumericId: string): Promise<Student[]> => {
+    try {
+      const params = `filters[school_class][id][$eq]=${classNumericId}&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=is_approved&fields[9]=company&fields[10]=phone&populate[school_class]=true&pagination[pageSize]=500`;
+      const data = await fetchCategory(`${COLLECTIONS.STUDENTS}?${params}`);
+      if (!data) return [];
+      return data.map((d: any) => {
         const classData = d.school_class?.data || d.school_class;
         return {
           id: String(d.documentId || d.id),
           strapiId: d.strapiId || d.id,
-          stt: d.stt || 0,
-          studentCode: d.student_code || d.studentCode || '',
-          fullName: d.full_name || d.fullName || '',
+          stt: 0,
+          studentCode: d.student_code || '',
+          fullName: d.full_name || '',
           firstName: d.first_name || '',
           lastName: d.last_name || '',
           dob: d.dob || '',
           pob: d.pob || '',
-          address: d.address || '',
+          address: '',
           gender: d.gender || '',
           idNumber: d.id_number || '',
-          cardNumber: d.card_number || '',
-          group: classData?.attributes?.name || classData?.name || d.group || '',
-          className: classData?.attributes?.name || classData?.name || d.class_name || '',
-          classCode: classData?.attributes?.code || classData?.code || d.class_code || '',
-          classId: String(classData?.id || classData?.strapiId || ''),
+          cardNumber: '',
+          group: classData?.attributes?.name || classData?.name || '',
+          className: classData?.attributes?.name || classData?.name || '',
+          classCode: classData?.attributes?.code || classData?.code || '',
+          classId: String(classData?.id || ''),
           isApproved: !!d.is_approved,
           documents: [],
-          photo: d.photo || null
+          photo: null
         } as Student;
-      }));
+      });
+    } catch (e) {
+      console.error('Failed to load students for class', classNumericId, e);
+      return [];
     }
   };
 
@@ -591,7 +600,6 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       // value from dropdown is c.id (numeric), find class by that
       const selectedClass = availableClasses.find(c => String(c.id) === selectedId || String(c.strapiId) === selectedId);
       if (selectedClass) {
-        // Store numeric id as classId for consistent matching with student.classId
         const numericClassId = String(selectedClass.id || selectedClass.strapiId || '');
         setFormData({
           ...formData,
@@ -600,32 +608,31 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
           classId: numericClassId
         });
 
-        const selectedNumericId = String(selectedClass.strapiId || '');
-        console.log('[DEBUG] handleTypeLinkSelect selectedId:', selectedId, 'numericClassId:', numericClassId);
-
-        const classStudents = allStudents.filter(s => {
-          const sClassId = String((s as any).classId || '');
-          const matchesClass = sClassId === selectedId || sClassId === numericClassId || (selectedNumericId && sClassId === selectedNumericId);
-          const approved = (s as any).isApproved === true;
-          return matchesClass && approved;
+        // LAZY LOAD: fetch only students for this specific class from the API
+        // This avoids loading 500k+ students into browser memory
+        setLoading(true);
+        loadStudentsByClass(numericClassId).then(classStudents => {
+          const approvedStudents = classStudents.filter(s => (s as any).isApproved === true);
+          const mappedStudents: DecisionDetail[] = approvedStudents.map((s, idx) => ({
+            id: s.id,
+            stt: idx + 1,
+            fullName: s.fullName,
+            dob: s.dob || '',
+            cardNumber: s.cardNumber || s.idNumber || '',
+            studentCode: s.studentCode,
+            years: '',
+            hometown: s.pob || '',
+            address: (s as any).address || '',
+            notes: '',
+            gender: s.gender || '',
+            documents: s.documents || [],
+            photo: s.photo,
+          }));
+          // Update allStudents so the picker table can show them
+          setAllStudents(approvedStudents);
+          setTempStudents(mappedStudents);
+          setLoading(false);
         });
-        console.log('[DEBUG] classStudents found:', classStudents.length, 'for class', numericClassId, 'sample classIds:', allStudents.slice(0, 3).map(s => (s as any).classId));
-        const mappedStudents: DecisionDetail[] = classStudents.map((s, idx) => ({
-          id: s.id,
-          stt: idx + 1,
-          fullName: s.fullName,
-          dob: s.dob || '',
-          cardNumber: s.cardNumber || s.idNumber || '',
-          studentCode: s.studentCode,
-          years: '',
-          hometown: s.pob || '',
-          address: (s as any).address || '',
-          notes: '',
-          gender: s.gender || '',
-          documents: s.documents || [],
-          photo: s.photo,
-        }));
-        setTempStudents(mappedStudents);
       }
     } else {
       const openingDecision = decisions.find(d => String(d.id) === selectedId);
