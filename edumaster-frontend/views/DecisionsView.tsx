@@ -431,7 +431,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   // This scales to 500k+ students because we only fetch students for one class at a time
   const loadStudentsByClass = async (classDocId: string): Promise<Student[]> => {
     try {
-      const params = `filters[school_class][documentId][$eq]=${classDocId}&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=is_approved&fields[9]=company&fields[10]=phone&populate[school_class]=true&pagination[pageSize]=500`;
+      const params = `filters[school_class][documentId][$eq]=${classDocId}&filters[is_approved][$eq]=true&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=is_approved&fields[9]=company&fields[10]=phone&populate[school_class]=true&pagination[pageSize]=500`;
       const data = await fetchCategory(`${COLLECTIONS.STUDENTS}?${params}`);
       if (!data) return [];
       return data.map((d: any) => {
@@ -454,7 +454,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
           className: classData?.attributes?.name || classData?.name || '',
           classCode: classData?.attributes?.code || classData?.code || '',
           classId: String(classData?.documentId || classData?.id || ''),
-          isApproved: !!d.is_approved,
+          isApproved: d.is_approved === true || String(d.is_approved).toLowerCase() === 'true',
           documents: [],
           photo: null
         } as Student;
@@ -610,7 +610,13 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         // This avoids loading 500k+ students into browser memory
         setLoading(true);
         loadStudentsByClass(numericClassId).then(classStudents => {
-          const approvedStudents = classStudents.filter(s => (s as any).isApproved === true);
+          // Only include students who are approved AND not already assigned to another opening decision
+          const approvedStudents = classStudents.filter(s => {
+            const isApproved = (s as any).isApproved === true;
+            const isAlreadyAssigned = assignedStudentIds.has(String(s.id)) || assignedStudentIds.has(String((s as any).strapiId));
+            return isApproved && !isAlreadyAssigned;
+          });
+          
           const mappedStudents: DecisionDetail[] = approvedStudents.map((s, idx) => ({
             id: s.id,
             stt: idx + 1,
@@ -1037,7 +1043,15 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     if (viewType === 'OPENING' && formData.classId) {
       setLoading(true);
       loadStudentsByClass(formData.classId).then(classStudents => {
-        const approvedStudents = classStudents.filter(s => (s as any).isApproved === true);
+        // filter out unapproved AND currently assigned students to OTHER opening decisions
+        const approvedStudents = classStudents.filter(s => {
+          const isApproved = (s as any).isApproved === true;
+          // Note: When editing, assignedStudentIds currently includes the current decision's students too.
+          // BUT the add modal shouldn't show students that are already in tempStudents anyway.
+          const isAlreadyAssigned = assignedStudentIds.has(String(s.id)) || assignedStudentIds.has(String((s as any).strapiId));
+          const isAlreadyInThisDecision = tempStudents.some(ts => String(ts.id) === String(s.id) || String(ts.id) === String((s as any).strapiId));
+          return isApproved && (!isAlreadyAssigned || isAlreadyInThisDecision);
+        });
         setAllStudents(approvedStudents);
         setLoading(false);
         setIsAddStudentModalOpen(true);
@@ -3000,21 +3014,21 @@ có ảnh</span>
               </p>
             </div>
           </div>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <button onClick={() => { setIsAuditModalOpen(true); loadAuditLogs(); }} className="bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 px-4 py-2.5 rounded-xl font-bold flex gap-2 shadow-sm transition-all">
-            <History size={20} /> Lịch sử
-          </button>
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => { setIsAuditModalOpen(true); loadAuditLogs(); }} className="bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 px-4 py-2.5 rounded-xl font-bold flex gap-2 shadow-sm transition-all">
+              <History size={20} /> Lịch sử
+            </button>
 
-          <button onClick={() => {
-            setEditingId(null);
-            setFormData({
-              number: '', signedDate: new Date().toISOString().split('T')[0], signer: 'HIỆU TRƯỞNG',
-              location: FIXED_LOCATION, company: '', classType: '', classCode: '', className: '', trainingCourse: '', notes: '', classId: '', relatedOpeningId: '', startIndex: '1'
-            });
-            setTempStudents([]);
-            setIsFormOpen(true);
-          }} className={`${viewType === 'OPENING' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'} text-white px-5 py-2.5 rounded-xl font-bold flex gap-2 shadow-lg transition-all`}><Plus /> Tạo mới</button>
+            <button onClick={() => {
+              setEditingId(null);
+              setFormData({
+                number: '', signedDate: new Date().toISOString().split('T')[0], signer: 'HIỆU TRƯỞNG',
+                location: FIXED_LOCATION, company: '', classType: '', classCode: '', className: '', trainingCourse: '', notes: '', classId: '', relatedOpeningId: '', startIndex: '1'
+              });
+              setTempStudents([]);
+              setIsFormOpen(true);
+            }} className={`${viewType === 'OPENING' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'} text-white px-5 py-2.5 rounded-xl font-bold flex gap-2 shadow-lg transition-all`}><Plus /> Tạo mới</button>
+          </div>
         </div>
       </div>
 
