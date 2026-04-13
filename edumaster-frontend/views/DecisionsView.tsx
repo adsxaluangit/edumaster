@@ -587,6 +587,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       return;
     }
 
+    if (viewType === 'OPENING') {
       // value from dropdown is c.id (numeric), find class by that
       const selectedClass = availableClasses.find(c => String(c.id) === selectedId || String(c.strapiId) === selectedId);
       if (selectedClass) {
@@ -599,24 +600,16 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
           classId: numericClassId
         });
 
-        // Auto-populate students from this class, EXCLUDING already assigned students
-        // and ONLY including students who are approved (Đã duyệt)
-        // selectedId = c.id from dropdown (documentId in Strapi v5)
-        // s.classId = String(classData?.documentId || classData?.id)
-        // Also compare against selectedClass numeric id/strapiId for safety
         const selectedNumericId = String(selectedClass.strapiId || '');
-        console.log('[DEBUG] handleTypeLinkSelect selectedId:', selectedId, 'selectedNumericId:', selectedNumericId);
-        console.log('[DEBUG] allStudents classIds sample:', allStudents.slice(0, 5).map(s => ({ name: s.fullName, classId: (s as any).classId, isApproved: (s as any).isApproved })));
+        console.log('[DEBUG] handleTypeLinkSelect selectedId:', selectedId, 'numericClassId:', numericClassId);
 
         const classStudents = allStudents.filter(s => {
           const sClassId = String((s as any).classId || '');
-          const matchesClass = sClassId === selectedId || (selectedNumericId && sClassId === selectedNumericId);
+          const matchesClass = sClassId === selectedId || sClassId === numericClassId || (selectedNumericId && sClassId === selectedNumericId);
           const approved = (s as any).isApproved === true;
-          // Note: Do NOT filter out assignedStudentIds here — students may need to be in multiple decisions
-          // (e.g., OPENING then RECOGNITION). Duplicate check within the same decision is handled separately.
           return matchesClass && approved;
         });
-        console.log('[DEBUG] classStudents found:', classStudents.length, 'approved students for class', selectedId);
+        console.log('[DEBUG] classStudents found:', classStudents.length, 'for class', numericClassId, 'sample classIds:', allStudents.slice(0, 3).map(s => (s as any).classId));
         const mappedStudents: DecisionDetail[] = classStudents.map((s, idx) => ({
           id: s.id,
           stt: idx + 1,
