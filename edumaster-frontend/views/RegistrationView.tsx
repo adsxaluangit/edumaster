@@ -88,6 +88,9 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
 
 
 
+    const [existingData, setExistingData] = useState<any>(null);
+    const [isCheckingId, setIsCheckingId] = useState(false);
+
     // Load available classes from API
     useEffect(() => {
         const loadClasses = async () => {
@@ -96,7 +99,6 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                 if (classes && classes.length > 0) {
                     setAvailableClasses(classes);
                 } else {
-                    // Fallback to mock if API returns nothing (or remove fallback if strict)
                     setAvailableClasses(MOCK_CLASSES);
                 }
             } catch (error) {
@@ -106,6 +108,42 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
         };
         loadClasses();
     }, []);
+
+    // Check for existing student when 12 digits ID is typed
+    useEffect(() => {
+        const checkExisting = async (cccd: string) => {
+            setIsCheckingId(true);
+            try {
+                const oneYearAgo = new Date();
+                oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+                const filters = `filters[id_number][$eq]=${cccd}&filters[createdAt][$gte]=${oneYearAgo.toISOString()}&sort=createdAt:desc`;
+                // customParams to populate documents
+                const endpoint = `${COLLECTIONS.STUDENTS}?populate=*&pagination[pageSize]=1&${filters}`;
+                const data = await fetchCategory(endpoint);
+                
+                if (data && data.length > 0) {
+                    const latestStudent = data[0];
+                    if (latestStudent.photo || (latestStudent.documents && latestStudent.documents.length > 0)) {
+                        setExistingData(latestStudent);
+                    } else {
+                        setExistingData(null);
+                    }
+                } else {
+                    setExistingData(null);
+                }
+            } catch (err) {
+                console.error("Check existing failed", err);
+            } finally {
+                setIsCheckingId(false);
+            }
+        };
+
+        if (formData.idNumber.length === 12) {
+            checkExisting(formData.idNumber);
+        } else {
+            setExistingData(null);
+        }
+    }, [formData.idNumber]);
 
 
 
@@ -134,6 +172,11 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
         const selectedClass = availableClasses.find(c => c.code === formData.classCode);
 
         let finalPhotoUrl = studentPhoto;
+        // Re-use existing photo if no new one provided
+        if (!finalPhotoUrl && existingData && existingData.photo) {
+            finalPhotoUrl = existingData.photo;
+        }
+
         if (finalPhotoUrl && finalPhotoUrl.startsWith('data:image/')) {
            const uploadedInfo = await uploadFile(finalPhotoUrl, `avatar_${formData.idNumber}_${Date.now()}.jpg`);
            if (uploadedInfo && uploadedInfo.length > 0) {
@@ -143,6 +186,11 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
         }
 
         let finalCccdFront = cccdFront;
+        const existingCccdFront = existingData?.documents?.find((d: any) => d.name === 'CCCD Mặt trước')?.url;
+        if (!finalCccdFront && existingCccdFront) {
+            finalCccdFront = existingCccdFront;
+        }
+
         if (finalCccdFront && finalCccdFront.startsWith('data:image/')) {
            const uploadedInfo = await uploadFile(finalCccdFront, `cccd_front_${formData.idNumber}_${Date.now()}.jpg`);
            if (uploadedInfo && uploadedInfo.length > 0) {
@@ -152,6 +200,11 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
         }
 
         let finalCccdBack = cccdBack;
+        const existingCccdBack = existingData?.documents?.find((d: any) => d.name === 'CCCD Mặt sau')?.url;
+        if (!finalCccdBack && existingCccdBack) {
+            finalCccdBack = existingCccdBack;
+        }
+
         if (finalCccdBack && finalCccdBack.startsWith('data:image/')) {
            const uploadedInfo = await uploadFile(finalCccdBack, `cccd_back_${formData.idNumber}_${Date.now()}.jpg`);
            if (uploadedInfo && uploadedInfo.length > 0) {
@@ -437,6 +490,13 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                             className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400"
                                             placeholder="Nhập 12 số CCCD"
                                         />
+                                        {isCheckingId && <p className="text-xs text-blue-500 mt-1">Đang kiểm tra dữ liệu...</p>}
+                                        {existingData && !isCheckingId && (
+                                            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-700 flex items-start gap-1">
+                                                <CheckCircle size={14} className="mt-0.5 shrink-0" />
+                                                <span>Hệ thống ghi nhận bạn đã có sẵn Ảnh thẻ & CCCD hợp lệ. Bạn không cần tải lại ảnh nếu không có thay đổi.</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
