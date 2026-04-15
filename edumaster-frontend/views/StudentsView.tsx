@@ -132,21 +132,46 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       }
 
       // Fetch both concurrently to avoid UI flash (race condition)
-      // When filtering by class: use normal API (show ALL students in that class, including assigned)
-      // When no class filter: use unassigned endpoint (inbox pool — only unassigned students)
+      // When no class filter: use unassigned endpoint (inbox pool — only unassigned/unapproved students)
+      // When class filter active: fetch all in that class, then filter on the frontend to exclude assigned ones
       const studentEndpoint = selectedClassFilter ? COLLECTIONS.STUDENTS : 'students/unassigned';
       const [res, decisionsRaw] = await Promise.all([
         fetchCategoryPaginated(studentEndpoint, currentPage, pageSize, filters, customParams),
         fetchCategory(COLLECTIONS.CLASS_DECISIONS)
       ]);
 
+      let loadedDecisions: any[] = [];
       if (decisionsRaw) {
+        loadedDecisions = decisionsRaw;
         setAllDecisions(decisionsRaw);
       }
 
       if (res && res.data) {
-        setStudents(res.data.map(mapStudentFromApi));
-        setTotalStudents(res.meta.pagination.total);
+        let fetchedStudents = res.data.map(mapStudentFromApi);
+
+        // When a class filter is active, exclude students already assigned to ANY OPENING decision
+        if (selectedClassFilter) {
+          const assignedIds = new Set<string>();
+          loadedDecisions.forEach((d: any) => {
+            if (d.type !== 'OPENING') return;
+            const studentsInDec = d.students?.data || d.students || [];
+            studentsInDec.forEach((s: any) => {
+              const sid = String(s.documentId || s.id || '');
+              if (sid) assignedIds.add(sid);
+              // Also store strapiId (numeric) as fallback
+              if (s.id) assignedIds.add(String(s.id));
+            });
+          });
+
+          fetchedStudents = fetchedStudents.filter((s: any) => {
+            const docId = String(s.id || '');
+            const numId = String(s.strapiId || '');
+            return !assignedIds.has(docId) && !assignedIds.has(numId);
+          });
+        }
+
+        setStudents(fetchedStudents);
+        setTotalStudents(selectedClassFilter ? fetchedStudents.length : res.meta.pagination.total);
       }
 
     } catch (e) {
@@ -189,7 +214,8 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
 
 
-  // Filtered Students (Filtering is now natively handled by the SQL Backend Custom Endpoint)
+  // Filtered Students
+  // When class filter active: frontend also strips out students assigned to OPENING decisions (see loadData above)
   const filteredStudents = students;
 
   // Handle class selection change
