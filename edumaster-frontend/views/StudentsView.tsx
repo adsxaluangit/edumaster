@@ -131,47 +131,18 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
          filters += (filters ? '&' : '') + `filters[school_class][name][$eq]=${encodeURIComponent(selectedClassFilter)}`;
       }
 
-      // Fetch both concurrently to avoid UI flash (race condition)
-      // When no class filter: use unassigned endpoint (inbox pool — only unassigned/unapproved students)
-      // When class filter active: fetch all in that class, then filter on the frontend to exclude assigned ones
-      const studentEndpoint = selectedClassFilter ? COLLECTIONS.STUDENTS : 'students/unassigned';
-      const [res, decisionsRaw] = await Promise.all([
+      // Always use unassigned endpoint to exclude students already in decisions (handled by backend)
+      const studentEndpoint = 'students/unassigned';
+      const [res] = await Promise.all([
         fetchCategoryPaginated(studentEndpoint, currentPage, pageSize, filters, customParams),
-        fetchCategory(COLLECTIONS.CLASS_DECISIONS)
+        // Fetch decisions only for recognition check if needed, but not for exclusion here
+        fetchCategory(COLLECTIONS.CLASS_DECISIONS).then(data => setAllDecisions(data || []))
       ]);
-
-      let loadedDecisions: any[] = [];
-      if (decisionsRaw) {
-        loadedDecisions = decisionsRaw;
-        setAllDecisions(decisionsRaw);
-      }
 
       if (res && res.data) {
         let fetchedStudents = res.data.map(mapStudentFromApi);
-
-        // When a class filter is active, exclude students already assigned to ANY OPENING decision
-        if (selectedClassFilter) {
-          const assignedIds = new Set<string>();
-          loadedDecisions.forEach((d: any) => {
-            if (d.type !== 'OPENING') return;
-            const studentsInDec = d.students?.data || d.students || [];
-            studentsInDec.forEach((s: any) => {
-              const sid = String(s.documentId || s.id || '');
-              if (sid) assignedIds.add(sid);
-              // Also store strapiId (numeric) as fallback
-              if (s.id) assignedIds.add(String(s.id));
-            });
-          });
-
-          fetchedStudents = fetchedStudents.filter((s: any) => {
-            const docId = String(s.id || '');
-            const numId = String(s.strapiId || '');
-            return !assignedIds.has(docId) && !assignedIds.has(numId);
-          });
-        }
-
         setStudents(fetchedStudents);
-        setTotalStudents(selectedClassFilter ? fetchedStudents.length : res.meta.pagination.total);
+        setTotalStudents(res.meta.pagination.total);
       }
 
     } catch (e) {
@@ -1282,7 +1253,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   return (
     <div className="flex flex-col h-full bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden animate-in fade-in duration-500">
       <div className="bg-[#4a5568] text-white px-3 py-1.5 flex justify-between items-center text-xs font-bold">
-        <div className="flex items-center gap-2"><span>Quản lý học viên (v1.1 - Unfiltered)</span><X size={14} className="cursor-pointer hover:bg-white/10" /></div>
+        <div className="flex items-center gap-2"><span>Quản lý học viên (v1.1 - {selectedClassFilter ? `Lọc: ${selectedClassFilter}` : 'Chưa xếp lớp'})</span><X size={14} className="cursor-pointer hover:bg-white/10" /></div>
       </div>
 
       {isFormOpen && renderStudentForm()}
