@@ -41,6 +41,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
   // Document Upload State
   const [uploadingStudentId, setUploadingStudentId] = useState<string | null>(null);
+  const [uploadingDocName, setUploadingDocName] = useState<string | null>(null);
   const [viewingDocsStudentId, setViewingDocsStudentId] = useState<string | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
@@ -485,9 +486,10 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
     }
   };
 
-  const handleTriggerUpload = (studentId: string, e: React.MouseEvent) => {
+  const handleTriggerUpload = (studentId: string, e: React.MouseEvent, docName?: string) => {
     e.stopPropagation();
     setUploadingStudentId(studentId);
+    setUploadingDocName(docName || null);
     docInputRef.current?.click();
   };
 
@@ -511,7 +513,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
           }
 
           const payload = {
-            name: file.name,
+            name: uploadingDocName || file.name,
             type: file.type,
             date: new Date().toLocaleDateString('vi-VN'),
             url: finalDocUrl,
@@ -1128,7 +1130,17 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                   <div className="grid grid-cols-2 gap-3">
                     {/* Front */}
                     <div className="space-y-1">
-                      <span className="text-[10px] text-slate-400 font-medium">Mặt trước:</span>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] text-slate-400 font-medium">Mặt trước:</span>
+                        {editingId && (
+                           <button 
+                             onClick={(e) => handleTriggerUpload(editingId, e, 'CCCD Mặt trước')}
+                             className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-100 transition-colors flex items-center gap-1"
+                           >
+                             <Upload size={10} /> Tải lên
+                           </button>
+                        )}
+                      </div>
                       <div 
                         className="aspect-[1.58/1] bg-slate-100 rounded border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-300 transition-all relative group"
                         onClick={() => {
@@ -1142,7 +1154,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                             className="w-full h-full object-cover" 
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px]">Chưa có ảnh</div>
+                          <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px] bg-white">Chưa có ảnh</div>
                         )}
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                           <Search size={16} className="text-white" />
@@ -1151,7 +1163,17 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                     </div>
                     {/* Back */}
                     <div className="space-y-1">
-                      <span className="text-[10px] text-slate-400 font-medium">Mặt sau:</span>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] text-slate-400 font-medium">Mặt sau:</span>
+                        {editingId && (
+                           <button 
+                             onClick={(e) => handleTriggerUpload(editingId, e, 'CCCD Mặt sau')}
+                             className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-100 transition-colors flex items-center gap-1"
+                           >
+                             <Upload size={10} /> Tải lên
+                           </button>
+                        )}
+                      </div>
                       <div 
                         className="aspect-[1.58/1] bg-slate-100 rounded border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-300 transition-all relative group"
                         onClick={() => {
@@ -1165,7 +1187,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                             className="w-full h-full object-cover" 
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px]">Chưa có ảnh</div>
+                          <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px] bg-white">Chưa có ảnh</div>
                         )}
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                           <Search size={16} className="text-white" />
