@@ -41,6 +41,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
   // Document Upload State
   const [uploadingStudentId, setUploadingStudentId] = useState<string | null>(null);
+  const [uploadingDocName, setUploadingDocName] = useState<string | null>(null);
   const [viewingDocsStudentId, setViewingDocsStudentId] = useState<string | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
@@ -131,47 +132,18 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
          filters += (filters ? '&' : '') + `filters[school_class][name][$eq]=${encodeURIComponent(selectedClassFilter)}`;
       }
 
-      // Fetch both concurrently to avoid UI flash (race condition)
-      // When no class filter: use unassigned endpoint (inbox pool — only unassigned/unapproved students)
-      // When class filter active: fetch all in that class, then filter on the frontend to exclude assigned ones
-      const studentEndpoint = selectedClassFilter ? COLLECTIONS.STUDENTS : 'students/unassigned';
-      const [res, decisionsRaw] = await Promise.all([
+      // Always use unassigned endpoint to exclude students already in decisions (handled by backend)
+      const studentEndpoint = 'students/unassigned';
+      const [res] = await Promise.all([
         fetchCategoryPaginated(studentEndpoint, currentPage, pageSize, filters, customParams),
-        fetchCategory(COLLECTIONS.CLASS_DECISIONS)
+        // Fetch decisions only for recognition check if needed, but not for exclusion here
+        fetchCategory(COLLECTIONS.CLASS_DECISIONS).then(data => setAllDecisions(data || []))
       ]);
-
-      let loadedDecisions: any[] = [];
-      if (decisionsRaw) {
-        loadedDecisions = decisionsRaw;
-        setAllDecisions(decisionsRaw);
-      }
 
       if (res && res.data) {
         let fetchedStudents = res.data.map(mapStudentFromApi);
-
-        // When a class filter is active, exclude students already assigned to ANY OPENING decision
-        if (selectedClassFilter) {
-          const assignedIds = new Set<string>();
-          loadedDecisions.forEach((d: any) => {
-            if (d.type !== 'OPENING') return;
-            const studentsInDec = d.students?.data || d.students || [];
-            studentsInDec.forEach((s: any) => {
-              const sid = String(s.documentId || s.id || '');
-              if (sid) assignedIds.add(sid);
-              // Also store strapiId (numeric) as fallback
-              if (s.id) assignedIds.add(String(s.id));
-            });
-          });
-
-          fetchedStudents = fetchedStudents.filter((s: any) => {
-            const docId = String(s.id || '');
-            const numId = String(s.strapiId || '');
-            return !assignedIds.has(docId) && !assignedIds.has(numId);
-          });
-        }
-
         setStudents(fetchedStudents);
-        setTotalStudents(selectedClassFilter ? fetchedStudents.length : res.meta.pagination.total);
+        setTotalStudents(res.meta.pagination.total);
       }
 
     } catch (e) {
@@ -514,9 +486,10 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
     }
   };
 
-  const handleTriggerUpload = (studentId: string, e: React.MouseEvent) => {
+  const handleTriggerUpload = (studentId: string, e: React.MouseEvent, docName?: string) => {
     e.stopPropagation();
     setUploadingStudentId(studentId);
+    setUploadingDocName(docName || null);
     docInputRef.current?.click();
   };
 
@@ -540,7 +513,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
           }
 
           const payload = {
-            name: file.name,
+            name: uploadingDocName || file.name,
             type: file.type,
             date: new Date().toLocaleDateString('vi-VN'),
             url: finalDocUrl,
@@ -1157,7 +1130,17 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                   <div className="grid grid-cols-2 gap-3">
                     {/* Front */}
                     <div className="space-y-1">
-                      <span className="text-[10px] text-slate-400 font-medium">Mặt trước:</span>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] text-slate-400 font-medium">Mặt trước:</span>
+                        {editingId && (
+                           <button 
+                             onClick={(e) => handleTriggerUpload(editingId, e, 'CCCD Mặt trước')}
+                             className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-100 transition-colors flex items-center gap-1"
+                           >
+                             <Upload size={10} /> Tải lên
+                           </button>
+                        )}
+                      </div>
                       <div 
                         className="aspect-[1.58/1] bg-slate-100 rounded border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-300 transition-all relative group"
                         onClick={() => {
@@ -1171,7 +1154,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                             className="w-full h-full object-cover" 
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px]">Chưa có ảnh</div>
+                          <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px] bg-white">Chưa có ảnh</div>
                         )}
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                           <Search size={16} className="text-white" />
@@ -1180,7 +1163,17 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                     </div>
                     {/* Back */}
                     <div className="space-y-1">
-                      <span className="text-[10px] text-slate-400 font-medium">Mặt sau:</span>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] text-slate-400 font-medium">Mặt sau:</span>
+                        {editingId && (
+                           <button 
+                             onClick={(e) => handleTriggerUpload(editingId, e, 'CCCD Mặt sau')}
+                             className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-100 transition-colors flex items-center gap-1"
+                           >
+                             <Upload size={10} /> Tải lên
+                           </button>
+                        )}
+                      </div>
                       <div 
                         className="aspect-[1.58/1] bg-slate-100 rounded border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-300 transition-all relative group"
                         onClick={() => {
@@ -1194,7 +1187,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                             className="w-full h-full object-cover" 
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px]">Chưa có ảnh</div>
+                          <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px] bg-white">Chưa có ảnh</div>
                         )}
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                           <Search size={16} className="text-white" />
@@ -1282,7 +1275,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   return (
     <div className="flex flex-col h-full bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden animate-in fade-in duration-500">
       <div className="bg-[#4a5568] text-white px-3 py-1.5 flex justify-between items-center text-xs font-bold">
-        <div className="flex items-center gap-2"><span>Quản lý học viên (v1.1 - Unfiltered)</span><X size={14} className="cursor-pointer hover:bg-white/10" /></div>
+        <div className="flex items-center gap-2"><span>Quản lý học viên (v1.1 - {selectedClassFilter ? `Lọc: ${selectedClassFilter}` : 'Chưa xếp lớp'})</span><X size={14} className="cursor-pointer hover:bg-white/10" /></div>
       </div>
 
       {isFormOpen && renderStudentForm()}
@@ -1305,7 +1298,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
             className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 ring-blue-500/20"
           />
         </div>
-        <div className="w-[180px]">
+        <div className="w-[450px]">
           <select
             value={selectedClassFilter}
             onChange={(e) => {
