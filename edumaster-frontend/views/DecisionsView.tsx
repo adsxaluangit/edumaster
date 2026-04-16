@@ -460,7 +460,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         } as Student;
       });
     } catch (e) {
-      console.error('Failed to load students for class', classNumericId, e);
+      console.error('Failed to load students for class', classDocId, e);
       return [];
     }
   };
@@ -2511,6 +2511,20 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
                   type="text"
                   value={formData.trainingCourse}
                   onChange={e => setFormData({ ...formData, trainingCourse: e.target.value })}
+                  onBlur={(e) => {
+                    const val = e.target.value.trim();
+                    if (!val) return;
+                    
+                    const isDuplicate = decisions.some(d => 
+                      d.type === viewType && 
+                      d.trainingCourse.trim().toLowerCase() === val.toLowerCase() &&
+                      String(d.id) !== String(editingId)
+                    );
+                    
+                    if (isDuplicate) {
+                      alert(`CẢNH BÁO: Đợt/Khóa "${val}" đã tồn tại trong hệ thống. Vui lòng kiểm tra lại để tránh trùng lặp.`);
+                    }
+                  }}
                   className="flex-1 border border-slate-300 rounded-sm px-2 py-1.5 text-[12px] outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                   placeholder="Đợt/Khóa"
                 />
