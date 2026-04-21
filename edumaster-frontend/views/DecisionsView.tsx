@@ -4,6 +4,7 @@ import { Student } from '../types';
 import { fetchCategory, fetchCategoryAll, createCategory, updateCategory, deleteCategory, COLLECTIONS, createLog, uploadFile } from '../services/api';
 import ExcelJS from 'exceljs';
 import { formatDate, parseToISO } from '../utils/dateUtils';
+import { downloadFile } from '../utils/fileUtils';
 
 interface DecisionDetail {
   id: string;
@@ -765,12 +766,24 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
 
       // Map student documentIds -> numeric strapiIds
       const studentNumericIds = tempStudents.map((s: any) => {
+        // If we already have the numeric strapiId, use it directly (Strapi v5 compatible)
+        if (s.strapiId && !isNaN(Number(s.strapiId))) {
+          return Number(s.strapiId);
+        }
+        
+        // Otherwise, try to find it in the allStudents list
         const stu = allStudents.find((st: any) =>
           String(st.id) === String(s.id) ||
           String(st.documentId) === String(s.id) ||
           String((st as any).strapiId) === String(s.id)
         );
-        return stu ? Number((stu as any).strapiId || stu.id) : null;
+        
+        if (stu) return Number((stu as any).strapiId || stu.id);
+        
+        // Fallback: if the id itself is numeric, it might be the strapiId
+        if (s.id && !isNaN(Number(s.id))) return Number(s.id);
+        
+        return null;
       }).filter(Boolean);
       console.log('DEBUG: tempStudents', tempStudents);
       console.log('DEBUG: mapped studentNumericIds', studentNumericIds);
@@ -1029,7 +1042,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     setTempStudents(d.students || []);
     setIsFormOpen(true);
 
-    if (d.type === 'OPENING' && d.classId) {
+    // Load students for the class (even for recognition, we might want to manually add more students)
+    if (d.classId) {
       setLoading(true);
       loadStudentsByClass(d.classId).then(classStudents => {
         const approvedStudents = classStudents.filter(s => (s as any).isApproved === true);
@@ -1040,7 +1054,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   };
 
   const handleOpenAddStudentModal = () => {
-    if (viewType === 'OPENING' && formData.classId) {
+    if (formData.classId) {
       setLoading(true);
       loadStudentsByClass(formData.classId).then(classStudents => {
         // filter out unapproved AND currently assigned students to OTHER opening decisions
@@ -2910,9 +2924,13 @@ có ảnh</span>
                       <span className="text-[10px] text-slate-400">{doc.date} • {doc.type.split('/')[1]?.toUpperCase() || 'FILE'}</span>
                     </div>
                   </div>
-                  <a href={doc.url} download={doc.name} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" title="Tải xuống">
+                  <button 
+                    onClick={() => downloadFile(doc.url, doc.name)} 
+                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" 
+                    title="Tải xuống"
+                  >
                     <Upload size={16} className="rotate-180" />
-                  </a>
+                  </button>
                 </div>
               ))}
             </div>

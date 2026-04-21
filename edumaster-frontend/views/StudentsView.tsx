@@ -5,6 +5,7 @@ import { Student } from '../types';
 import { MOCK_STUDENTS, MOCK_NATIONS, MOCK_CLASSES } from '../mockData';
 import { fetchCategory, fetchCategoryPaginated, createCategory, updateCategory, deleteCategory, COLLECTIONS, uploadFile } from '../services/api';
 import { formatDate, parseToISO } from '../utils/dateUtils';
+import { downloadFile } from '../utils/fileUtils';
 
 // MOCK_STUDENTS loaded from mockData.ts
 
@@ -1234,9 +1235,13 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                         <span className="text-[10px] text-slate-400">{doc.date} • {doc.type?.split('/')?.[1]?.toUpperCase() || 'FILE'}</span>
                       </div>
                     </div>
-                    <a href={doc.url} download={doc.name} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" title="Tải xuống">
+                    <button 
+                      onClick={() => downloadFile(doc.url, doc.name)} 
+                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" 
+                      title="Tải xuống"
+                    >
                       <Upload size={16} className="rotate-180" />
-                    </a>
+                    </button>
                   </div>
                 ))}
               </div>
