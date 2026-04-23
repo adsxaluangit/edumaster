@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Camera, X, Upload, Save, CheckCircle, LogIn, Lock, User, ChevronDown, AlertCircle } from 'lucide-react';
 import { Student } from '../types';
 import { MOCK_STUDENTS, MOCK_NATIONS, MOCK_CLASSES } from '../mockData';
-import { fetchCategory, createCategory, COLLECTIONS } from '../services/api';
+import { fetchCategory, createCategory, COLLECTIONS, uploadFile, checkDuplicateStudent } from '../services/api';
 import { parseToISO } from '../utils/dateUtils';
 
 const compressImage = (file: File, maxWidth: number = 1200): Promise<string> => {
@@ -88,6 +88,32 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
 
 
 
+    const [existingData, setExistingData] = useState<any>(null);
+    const [isCheckingId, setIsCheckingId] = useState(false);
+
+    // --- Duplicate guard ---
+    const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+    const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
+
+    const runDuplicateCheck = async (idNumber: string, classCode: string) => {
+        setDuplicateWarning(null);
+        if (!idNumber || idNumber.length < 9 || !classCode) return;
+        const selectedClass = availableClasses.find((c: any) => c.code === classCode);
+        const classDocId = selectedClass ? String(selectedClass.documentId || selectedClass.id || '') : '';
+        if (!classDocId) return;
+        setIsCheckingDuplicate(true);
+        try {
+            const result = await checkDuplicateStudent(idNumber, classDocId);
+            if (result.exists) {
+                setDuplicateWarning(
+                    `Bạn (CCCD: ${idNumber}) đã đăng ký lớp này rồi (${result.count} lần). Vui lòng chọn lớp khác hoặc liên hệ nhà trường!`
+                );
+            }
+        } finally {
+            setIsCheckingDuplicate(false);
+        }
+    };
+
     // Load available classes from API
     useEffect(() => {
         const loadClasses = async () => {
@@ -96,7 +122,6 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                 if (classes && classes.length > 0) {
                     setAvailableClasses(classes);
                 } else {
-                    // Fallback to mock if API returns nothing (or remove fallback if strict)
                     setAvailableClasses(MOCK_CLASSES);
                 }
             } catch (error) {
@@ -107,6 +132,42 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
         loadClasses();
     }, []);
 
+    // Check for existing student when 12 digits ID is typed
+    useEffect(() => {
+        const checkExisting = async (cccd: string) => {
+            setIsCheckingId(true);
+            try {
+                const oneYearAgo = new Date();
+                oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+                const filters = `filters[id_number][$eq]=${cccd}&filters[createdAt][$gte]=${oneYearAgo.toISOString()}&sort=createdAt:desc`;
+                // customParams to populate documents
+                const endpoint = `${COLLECTIONS.STUDENTS}?populate=*&pagination[pageSize]=1&${filters}`;
+                const data = await fetchCategory(endpoint);
+                
+                if (data && data.length > 0) {
+                    const latestStudent = data[0];
+                    if (latestStudent.photo || (latestStudent.documents && latestStudent.documents.length > 0)) {
+                        setExistingData(latestStudent);
+                    } else {
+                        setExistingData(null);
+                    }
+                } else {
+                    setExistingData(null);
+                }
+            } catch (err) {
+                console.error("Check existing failed", err);
+            } finally {
+                setIsCheckingId(false);
+            }
+        };
+
+        if (formData.idNumber.length === 12) {
+            checkExisting(formData.idNumber);
+        } else {
+            setExistingData(null);
+        }
+    }, [formData.idNumber]);
+
 
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -116,10 +177,32 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
             return;
         }
 
+        if (!formData.classCode) {
+            alert('Vui lòng chọn lớp học muốn đăng ký!');
+            return;
+        }
+
         if (formData.idNumber.length !== 12) {
             alert('Vui lòng nhập chính xác 12 số CCCD/CMND!');
             return;
         }
+
+        // --- HARD BLOCK: Kiểm tra trùng lập tại DB ---
+        const selectedClassForCheck = availableClasses.find((c: any) => c.code === formData.classCode);
+        const classDocIdForCheck = selectedClassForCheck
+            ? String(selectedClassForCheck.documentId || selectedClassForCheck.id || '')
+            : '';
+        if (classDocIdForCheck) {
+            const dupResult = await checkDuplicateStudent(formData.idNumber, classDocIdForCheck);
+            if (dupResult.exists) {
+                setDuplicateWarning(
+                    `Bạn (CCCD: ${formData.idNumber}) đã đăng ký lớp này rồi (${dupResult.count} lần). Vui lòng chọn lớp khác hoặc liên hệ nhà trường!`
+                );
+                alert(`KHÔNG THỂ ĐĂNG KÝ\n\nBạn có CCCD ${formData.idNumber} đã đăng ký lớp này rồi (${dupResult.count} lần).\n\nVui lòng chọn lớp khác hoặc liên hệ nhà trường để được hỗ trợ.`);
+                return;
+            }
+        }
+        // --------------------------------------------------
 
         const nameParts = formData.fullName.trim().split(' ');
         const firstName = nameParts.length > 1 ? nameParts.pop() || '' : formData.fullName;
@@ -128,7 +211,48 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
         // Find selected class
         const selectedClass = availableClasses.find(c => c.code === formData.classCode);
 
-        // Payload matching Strapi schema (snake_case)
+        let finalPhotoUrl = studentPhoto;
+        // Re-use existing photo if no new one provided
+        if (!finalPhotoUrl && existingData && existingData.photo) {
+            finalPhotoUrl = existingData.photo;
+        }
+
+        if (finalPhotoUrl && finalPhotoUrl.startsWith('data:image/')) {
+           const uploadedInfo = await uploadFile(finalPhotoUrl, `avatar_${formData.idNumber}_${Date.now()}.jpg`);
+           if (uploadedInfo && uploadedInfo.length > 0) {
+               finalPhotoUrl = uploadedInfo[0].url;
+               setStudentPhoto(finalPhotoUrl); // Update state to prevent re-upload
+           }
+        }
+
+        let finalCccdFront = cccdFront;
+        const existingCccdFront = existingData?.documents?.find((d: any) => d.name === 'CCCD Mặt trước')?.url;
+        if (!finalCccdFront && existingCccdFront) {
+            finalCccdFront = existingCccdFront;
+        }
+
+        if (finalCccdFront && finalCccdFront.startsWith('data:image/')) {
+           const uploadedInfo = await uploadFile(finalCccdFront, `cccd_front_${formData.idNumber}_${Date.now()}.jpg`);
+           if (uploadedInfo && uploadedInfo.length > 0) {
+               finalCccdFront = uploadedInfo[0].url;
+               setCccdFront(finalCccdFront); // Update state to prevent re-upload
+           }
+        }
+
+        let finalCccdBack = cccdBack;
+        const existingCccdBack = existingData?.documents?.find((d: any) => d.name === 'CCCD Mặt sau')?.url;
+        if (!finalCccdBack && existingCccdBack) {
+            finalCccdBack = existingCccdBack;
+        }
+
+        if (finalCccdBack && finalCccdBack.startsWith('data:image/')) {
+           const uploadedInfo = await uploadFile(finalCccdBack, `cccd_back_${formData.idNumber}_${Date.now()}.jpg`);
+           if (uploadedInfo && uploadedInfo.length > 0) {
+               finalCccdBack = uploadedInfo[0].url;
+               setCccdBack(finalCccdBack); // Update state to prevent re-upload
+           }
+        }
+
         const newStudentData = {
             stt: 0, // Backend or logic should handle this, setting 0 for now as 'pending'
             class_code: selectedClass ? selectedClass.code : 'PENDING',
@@ -154,7 +278,7 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
             address: formData.address,
             company: formData.company,
 
-            photo: studentPhoto,
+            photo: finalPhotoUrl,
             notes: formData.notes,
             is_approved: false
         };
@@ -166,22 +290,22 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
             if (createdStudent && (createdStudent.strapiId || createdStudent.id)) {
                 const studentIdStr = createdStudent.strapiId || createdStudent.id;
                 
-                if (cccdFront) {
+                if (finalCccdFront) {
                     await createCategory(COLLECTIONS.STUDENT_DOCUMENTS, {
                         name: 'CCCD Mặt trước',
                         type: 'image/jpeg',
                         date: new Date().toISOString(),
-                        url: cccdFront,
+                        url: finalCccdFront,
                         student: studentIdStr
                     });
                 }
                 
-                if (cccdBack) {
+                if (finalCccdBack) {
                     await createCategory(COLLECTIONS.STUDENT_DOCUMENTS, {
                         name: 'CCCD Mặt sau',
                         type: 'image/jpeg',
                         date: new Date().toISOString(),
-                        url: cccdBack,
+                        url: finalCccdBack,
                         student: studentIdStr
                     });
                 }
@@ -207,10 +331,21 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                     </p>
                     <div className="flex gap-3 justify-center">
                         <button
-                            onClick={() => window.location.reload()}
+                            onClick={() => {
+                                setIsSuccess(false);
+                                setFormData({ ...formData, classCode: '' });
+                            }}
+                            className="px-6 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700 transition-colors shadow-sm"
+                        >
+                            Đăng ký lớp mới
+                        </button>
+                        <button
+                            onClick={() => {
+                                window.location.href = 'https://mic1.edu.vn';
+                            }}
                             className="px-6 py-2 bg-slate-100 text-slate-700 font-bold rounded hover:bg-slate-200 transition-colors"
                         >
-                            Đăng ký mới
+                            Thoát
                         </button>
                     </div>
                 </div>
@@ -395,6 +530,13 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                             className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400"
                                             placeholder="Nhập 12 số CCCD"
                                         />
+                                        {isCheckingId && <p className="text-xs text-blue-500 mt-1">Đang kiểm tra dữ liệu...</p>}
+                                        {existingData && !isCheckingId && (
+                                            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-700 flex items-start gap-1">
+                                                <CheckCircle size={14} className="mt-0.5 shrink-0" />
+                                                <span>Hệ thống ghi nhận bạn đã có sẵn Ảnh thẻ & CCCD hợp lệ. Bạn không cần tải lại ảnh nếu không có thay đổi.</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -467,17 +609,43 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Đăng ký lớp học</label>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">
+                                        Đăng ký lớp học <span className="text-red-500">*</span>
+                                    </label>
                                     <select
                                         value={formData.classCode}
-                                        onChange={e => setFormData({ ...formData, classCode: e.target.value })}
-                                        className="w-full px-4 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                        onChange={e => {
+                                            const newCode = e.target.value;
+                                            setFormData({ ...formData, classCode: newCode });
+                                            setDuplicateWarning(null);
+                                            if (formData.idNumber.length === 12 && newCode) {
+                                                runDuplicateCheck(formData.idNumber, newCode);
+                                            }
+                                        }}
+                                        required
+                                        className={`w-full px-4 py-2 border rounded focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none ${
+                                            duplicateWarning ? 'border-red-400 bg-red-50'
+                                            : !formData.classCode ? 'border-red-400 bg-red-50'
+                                            : 'border-slate-300'
+                                        }`}
                                     >
                                         <option value="">-- Chọn lớp muốn học --</option>
-                                        {availableClasses.map(cls => (
+                                        {availableClasses.map((cls: any) => (
                                             <option key={cls.id} value={cls.code}>{cls.name}</option>
                                         ))}
                                     </select>
+                                    {isCheckingDuplicate && (
+                                        <p className="text-xs text-blue-500 mt-1 animate-pulse">Đang kiểm tra trùng lớp...</p>
+                                    )}
+                                    {duplicateWarning && !isCheckingDuplicate && (
+                                        <div className="mt-2 p-3 bg-red-50 border border-red-300 rounded-lg flex items-start gap-2">
+                                            <span className="text-red-500 text-base shrink-0">🚫</span>
+                                            <p className="text-red-700 font-bold text-xs">{duplicateWarning}</p>
+                                        </div>
+                                    )}
+                                    {!formData.classCode && !duplicateWarning && (
+                                        <p className="text-red-500 text-xs mt-1">※ Bắt buộc phải chọn lớp học</p>
+                                    )}
                                 </div>
 
                                 <div className="mb-4">
@@ -550,9 +718,14 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                         <div className="mt-8 pt-6 border-t border-slate-100 flex justify-end">
                             <button
                                 type="submit"
-                                className="px-8 py-3 bg-blue-600 text-white font-bold rounded-lg shadow-lg shadow-blue-500/30 hover:bg-blue-700 hover:-translate-y-0.5 transition-all text-sm flex items-center gap-2"
+                                disabled={!!duplicateWarning}
+                                className={`px-8 py-3 font-bold rounded-lg shadow-lg text-sm flex items-center gap-2 transition-all ${
+                                    duplicateWarning
+                                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                                        : 'bg-blue-600 text-white shadow-blue-500/30 hover:bg-blue-700 hover:-translate-y-0.5'
+                                }`}
                             >
-                                <Save size={18} /> GỬI ĐĂNG KÝ
+                                <Save size={18} /> GỬi ĐĂNG KÝ
                             </button>
                         </div>
                     </form>

@@ -3,8 +3,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { FileSpreadsheet, RefreshCw, Trash2, Plus, Search, Filter, ChevronDown, X, Camera, Save, Calendar, User, Upload, Check, Phone, MapPin, Briefcase, Flag, School, Edit3, Image as ImageIcon, FileText, CheckCircle2, XCircle, ShieldCheck, Printer } from 'lucide-react';
 import { Student } from '../types';
 import { MOCK_STUDENTS, MOCK_NATIONS, MOCK_CLASSES } from '../mockData';
-import { fetchCategory, createCategory, updateCategory, deleteCategory, COLLECTIONS } from '../services/api';
+import { fetchCategory, fetchCategoryPaginated, createCategory, updateCategory, deleteCategory, COLLECTIONS, uploadFile, checkDuplicateStudent } from '../services/api';
 import { formatDate, parseToISO } from '../utils/dateUtils';
+import { downloadFile } from '../utils/fileUtils';
 
 // MOCK_STUDENTS loaded from mockData.ts
 
@@ -13,9 +14,10 @@ import { formatDate, parseToISO } from '../utils/dateUtils';
 interface StudentsViewProps {
   prefilledStudent?: any;
   onClearPrefill?: () => void;
+  onRegisterAnother?: (student: any) => void;
 }
 
-const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPrefill }) => {
+const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPrefill, onRegisterAnother }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClassFilter, setSelectedClassFilter] = useState('');
@@ -26,6 +28,12 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   const [availableClasses, setAvailableClasses] = useState<any[]>([]);
   const [allDecisions, setAllDecisions] = useState<any[]>([]);
 
+  // Server-Side Config
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(50);
+  const [totalStudents, setTotalStudents] = useState(0);
+  const [searchTermServer, setSearchTermServer] = useState('');
+
   // Photo states
   const [studentPhoto, setStudentPhoto] = useState<string | null>(null);
   const [isCameraLive, setIsCameraLive] = useState(false);
@@ -35,9 +43,17 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
   // Document Upload State
   const [uploadingStudentId, setUploadingStudentId] = useState<string | null>(null);
+  const [uploadingDocName, setUploadingDocName] = useState<string | null>(null);
   const [viewingDocsStudentId, setViewingDocsStudentId] = useState<string | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
+
+  // --- Duplicate guard state ---
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
+
+  // --- Docs to copy from source student when using "+" button ---
+  const [prefilledStudentDocs, setPrefilledStudentDocs] = useState<any[]>([]);
 
   const [formData, setFormData] = useState({
     studentCode: '',
@@ -87,7 +103,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       group: classObj?.name || data.group || '', // Prefer relation name
       classCode: classObj?.code || data.class_code || '',
       className: classObj?.name || data.class_name || '',
-      classId: classObj?.documentId || classObj?.id || '',
+      classId: String(classObj?.id || ''),      // numeric id from raw school_class relation (consistent with strapiId)
       cardNumber: data.card_number || '', // If used
       isApproved: data.is_approved || false,
       notes: data.notes || '',
@@ -105,45 +121,40 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   const loadData = async () => {
     setLoading(true);
     try {
-      // Load Classes
       const classesData = await fetchCategory(COLLECTIONS.CLASSES);
       if (classesData) setAvailableClasses(classesData);
       else setAvailableClasses(MOCK_CLASSES);
 
-      // Load Nations
       const nationsData = await fetchCategory(COLLECTIONS.NATIONS);
       if (nationsData) setNations(nationsData);
       else setNations(MOCK_NATIONS);
 
-      // Load Students (and Map)
-      const [studentsRaw, decisionsRaw] = await Promise.all([
-        fetchCategory(COLLECTIONS.STUDENTS),
-        fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?populate[students]=true&populate[school_class]=true`)
+      const customParams = `sort=createdAt:desc&populate[school_class]=true&populate[documents][fields][0]=name&populate[documents][fields][1]=url&populate[documents][fields][2]=type&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=address&fields[9]=phone&fields[10]=is_approved&fields[11]=group&fields[12]=class_code&fields[13]=company&fields[14]=ethnicity&fields[15]=nationality&fields[16]=photo`;
+      
+      let filters = '';
+      if (searchTermServer) {
+         filters = `filters[$or][0][full_name][$containsi]=${encodeURIComponent(searchTermServer)}&filters[$or][1][id_number][$contains]=${encodeURIComponent(searchTermServer)}`;
+      }
+      if (selectedClassFilter) {
+         // Filter through the school_class relation using class name
+         // (most students have empty 'group' text field; data is in school_class relation)
+         filters += (filters ? '&' : '') + `filters[school_class][name][$eq]=${encodeURIComponent(selectedClassFilter)}`;
+      }
+
+      // Always use unassigned endpoint to exclude students already in decisions (handled by backend)
+      const studentEndpoint = 'students/unassigned';
+      const [res] = await Promise.all([
+        fetchCategoryPaginated(studentEndpoint, currentPage, pageSize, filters, customParams),
+        // Fetch decisions only for recognition check if needed, but not for exclusion here
+        fetchCategory(COLLECTIONS.CLASS_DECISIONS).then(data => setAllDecisions(data || []))
       ]);
 
-      if (decisionsRaw) setAllDecisions(decisionsRaw);
-
-      if (studentsRaw) {
-        console.log('[DEBUG] Students Raw Sample:', studentsRaw[0]);
-        const mappedStudents = studentsRaw.map(mapStudentFromApi);
-
-        // Identify students who have been assigned to an OPENING decision
-        const assignedStudentIds = new Set<string>();
-        if (decisionsRaw) {
-          decisionsRaw
-            .filter((d: any) => d.type === 'OPENING')
-            .forEach((d: any) => {
-              const studentsInDec = d.students?.data || d.students || [];
-              studentsInDec.forEach((s: any) => {
-                assignedStudentIds.add(String(s.documentId || s.id));
-              });
-            });
-        }
-
-        // Hide assigned students from active management
-        const activeStudents = mappedStudents.filter(s => !assignedStudentIds.has(s.id));
-        setStudents(activeStudents);
+      if (res && res.data) {
+        let fetchedStudents = res.data.map(mapStudentFromApi);
+        setStudents(fetchedStudents);
+        setTotalStudents(res.meta.pagination.total);
       }
+
     } catch (e) {
       console.error("Failed to load data:", e);
     } finally {
@@ -153,28 +164,33 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
   useEffect(() => {
     loadData();
-  }, [isFormOpen]);
+  }, [currentPage, searchTermServer, selectedClassFilter]);
 
   useEffect(() => {
     if (prefilledStudent) {
+      // idNumber fallback: old records may have CCCD only in student_code
+      const idNum = prefilledStudent.idNumber || prefilledStudent.studentCode || '';
       setFormData({
-        studentCode: prefilledStudent.studentCode || '',
+        studentCode: idNum,  // reuse CCCD as studentCode for new registration
         fullName: prefilledStudent.fullName || '',
         dob: prefilledStudent.dob ? (prefilledStudent.dob.includes('-') ? prefilledStudent.dob.split('-').reverse().join(',') : prefilledStudent.dob) : '',
         pob: prefilledStudent.pob || '',
         ethnicity: prefilledStudent.ethnicity || '',
         phone: prefilledStudent.phone || '',
-        idNumber: prefilledStudent.idNumber || '',
-        group: '', 
+        idNumber: idNum,
+        group: '',
         classCode: '',
-        classId: '', 
+        classId: '',
         nationality: prefilledStudent.nationality || 'Việt Nam',
         address: prefilledStudent.address || '',
+        company: prefilledStudent.company || '',  // Đơn vị công tác
         gender: prefilledStudent.gender || 'Nam',
         cardNumber: prefilledStudent.cardNumber || ''
-      });
+      } as any);
       setStudentPhoto(prefilledStudent.photo || null);
-      setEditingId(null); 
+      // Store source documents to copy after save
+      setPrefilledStudentDocs(prefilledStudent.documents || []);
+      setEditingId(null);
       setIsFormOpen(true);
       if (onClearPrefill) onClearPrefill();
     }
@@ -185,68 +201,46 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
 
   // Filtered Students
-  const filteredStudents = students.filter(s => {
-    const searchLower = searchTerm.toLowerCase();
-    const fullName = s.fullName ? s.fullName.toLowerCase() : '';
-    const studentCode = s.studentCode ? s.studentCode.toLowerCase() : '';
-    const groupName = s.group ? s.group.toLowerCase() : '';
+  // When class filter active: frontend also strips out students assigned to OPENING decisions (see loadData above)
+  const filteredStudents = students;
 
-    const matchesSearch = fullName.includes(searchLower) ||
-      studentCode.includes(searchLower) ||
-      groupName.includes(searchLower);
-
-    const matchesClass = selectedClassFilter ? s.group === selectedClassFilter : true;
-
-    // --- Visibility Rule: Hide if Graduated < 5 Years ---
-    const isRestricted = allDecisions.some((d: any) => {
-      // Check if decision is RECOGNITION
-      if (d.type !== 'RECOGNITION') return false;
-
-      // Check if decision is for the student's current class
-      const decClass = d.school_class?.data || d.school_class;
-      const decClassName = (decClass?.attributes?.name || decClass?.name || d.class_name || '').trim().toLowerCase();
-      if (decClassName !== (s.group || '').trim().toLowerCase()) return false;
-
-      // Check if student is in this decision
-      const studentsInDec = d.students?.data || d.students || [];
-      const isStudentInDecision = studentsInDec.some((sDec: any) =>
-        (sDec.attributes?.student_code || sDec.student_code) === s.studentCode ||
-        (sDec.attributes?.id_number || sDec.id_number) === s.studentCode
-      );
-
-      if (!isStudentInDecision) return false;
-
-      // Check Time Constraint (< 5 Years)
-      const signedDateStr = d.signed_date || d.signedDate;
-      if (!signedDateStr) return false;
-
-      const signedDate = new Date(signedDateStr);
-      const now = new Date();
-      const diffYears = (now.getTime() - signedDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-
-      return diffYears < 5;
-    });
-
-    if (isRestricted) return false;
-    // ----------------------------------------------------
-
-    // Debug logging for specific missing case
-    if (!matchesSearch && !matchesClass) {
-      // console.log(`Hidden: ${s.fullName} - Class: ${s.group}`);
+  // --- Duplicate check helper (called on CCCD blur / class change) ---
+  const runDuplicateCheck = async (idNumber: string, classId: string, excludeId?: string | null) => {
+    setDuplicateWarning(null);
+    if (!idNumber || idNumber.length < 9 || !classId) return;
+    setIsCheckingDuplicate(true);
+    try {
+      const result = await checkDuplicateStudent(idNumber, classId, excludeId || undefined);
+      if (result.exists) {
+        setDuplicateWarning(
+          `⚠️ Học viên CCCD ${idNumber} đã đăng ký lớp này rồi (${result.count} lần). Không thể đăng ký trùng!`
+        );
+      }
+    } finally {
+      setIsCheckingDuplicate(false);
     }
-
-    return matchesSearch && matchesClass;
-  });
+  };
 
   // Handle class selection change
   const handleClassChange = (className: string) => {
     const selectedClass = availableClasses.find(c => c.name === className);
+    // After normalizeStrapiList: .id = documentId (string), .strapiId = numeric id
+    // Strapi relation needs numeric id (strapiId) to avoid locale:null error
+    const numericId = selectedClass ? String(selectedClass.strapiId || '') : '';
+    // checkDuplicate backend uses document_id column, so pass documentId (.id)
+    const docId = selectedClass ? String(selectedClass.id || '') : '';
     setFormData({
       ...formData,
       group: className,
       classCode: selectedClass ? selectedClass.code : '',
-      classId: selectedClass ? (selectedClass.strapiId || selectedClass.id) : ''
+      classId: numericId  // numeric strapiId for school_class relation
     });
+    // Real-time duplicate check uses documentId
+    if (formData.idNumber && docId) {
+      runDuplicateCheck(formData.idNumber, docId, editingId);
+    } else {
+      setDuplicateWarning(null);
+    }
   };
 
   // Handle ID Number change (syncs with studentCode)
@@ -258,6 +252,21 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         idNumber: cleanedVal,
         studentCode: cleanedVal
       });
+      // Clear warning when user changes CCCD
+      setDuplicateWarning(null);
+    }
+  };
+
+  // Real-time check on CCCD blur
+  const handleIdNumberBlur = () => {
+    if (formData.idNumber && formData.classId) {
+      // classId in formData = numeric strapiId OR documentId from existing student
+      // Find class by matching either strapiId or documentId
+      const cls = availableClasses.find(
+        (c: any) => String(c.strapiId) === formData.classId || String(c.id) === formData.classId
+      );
+      const docId = cls ? String(cls.id) : formData.classId; // cls.id = documentId after normalization
+      runDuplicateCheck(formData.idNumber, docId, editingId);
     }
   };
 
@@ -363,7 +372,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.fullName || !formData.group || !formData.idNumber || !formData.dob) {
       alert('Vui lòng nhập đầy đủ: Họ tên, Ngày sinh, Lớp học và Số CMND/CCCD!');
       return;
@@ -396,6 +405,24 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
     const currentClassId = formData.classId;
     const currentClassName = formData.group.trim().toLowerCase();
     const currentIdNumber = formData.idNumber.trim();
+
+    // --- HARD BLOCK: Kiểm tra trùng lập tại cơ sở dữ liệu ---
+    if (formData.idNumber && formData.classId) {
+      // classId could be numeric strapiId (new selection) or documentId (from existing student data)
+      // Find matching class by either strapiId or documentId (.id)
+      const classForCheck = availableClasses.find(
+        (c: any) => String(c.strapiId) === formData.classId || String(c.id) === formData.classId
+      );
+      // After normalizeStrapiList: c.id = documentId
+      const classDocId = classForCheck ? String(classForCheck.id) : formData.classId;
+      const dupResult = await checkDuplicateStudent(formData.idNumber, classDocId, editingId || undefined);
+      if (dupResult.exists) {
+        alert(`KHÔNG THỂ LƯU\n\nHọc viên có số CCCD ${formData.idNumber} đã đăng ký lớp này rồi (${dupResult.count} lần).\nVui lòng kiểm tra lại!`);
+        setDuplicateWarning(`⚠️ Học viên CCCD ${formData.idNumber} đã đăng ký lớp này rồi (${dupResult.count} lần). Không thể đăng ký trùng!`);
+        return;
+      }
+    }
+    // ---------------------------------------------------------------
 
     // 1. Check if already enrolled in the ACTIVE students list for THIS class
     if (!editingId) {
@@ -484,15 +511,50 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
     const saveToApi = async () => {
       try {
+        let finalPhotoUrl = studentPhoto;
+        
+        // If photo is a newly captured Base64 string, upload it to Server Filesystem
+        if (studentPhoto && studentPhoto.startsWith('data:image/')) {
+          const uploadedInfo = await uploadFile(studentPhoto, `avatar_${formData.studentCode || Date.now()}.jpg`);
+          if (uploadedInfo && uploadedInfo.length > 0) {
+            finalPhotoUrl = uploadedInfo[0].url; 
+          }
+        }
+
+        payload.photo = finalPhotoUrl;
+
         if (editingId) {
           await updateCategory(COLLECTIONS.STUDENTS, editingId, payload);
         } else {
-          await createCategory(COLLECTIONS.STUDENTS, payload);
+          const newStudent = await createCategory(COLLECTIONS.STUDENTS, payload);
+
+          // --- Copy documents from source student ("+ Đăng ký lớp mới" flow) ---
+          if (prefilledStudentDocs.length > 0 && newStudent) {
+            const newStudentId = newStudent.id || newStudent.documentId;
+            if (newStudentId) {
+              for (const doc of prefilledStudentDocs) {
+                if (doc.url && doc.name) {
+                  try {
+                    await createCategory(COLLECTIONS.STUDENT_DOCUMENTS, {
+                      name: doc.name,
+                      url: doc.url,
+                      type: doc.type || 'application/pdf',
+                      student: newStudentId,
+                    });
+                  } catch (docErr) {
+                    console.warn('Failed to copy document:', doc.name, docErr);
+                  }
+                }
+              }
+            }
+            setPrefilledStudentDocs([]);
+          }
+          // -------------------------------------------------------------------
         }
         alert(editingId ? 'Cập nhật thành công!' : 'Thêm mới thành công!');
         setIsFormOpen(false);
         setEditingId(null);
-        // Re-fetch handled by useEffect dependency [isFormOpen]
+        loadData();
       } catch (e) {
         console.error(e);
         alert("Có lỗi xảy ra khi lưu dữ liệu!");
@@ -520,9 +582,10 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
     }
   };
 
-  const handleTriggerUpload = (studentId: string, e: React.MouseEvent) => {
+  const handleTriggerUpload = (studentId: string, e: React.MouseEvent, docName?: string) => {
     e.stopPropagation();
     setUploadingStudentId(studentId);
+    setUploadingDocName(docName || null);
     docInputRef.current?.click();
   };
 
@@ -536,11 +599,20 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       reader.onload = async () => {
         try {
           const studentObj = students.find(s => s.id === studentId);
+          let finalDocUrl = reader.result as string; 
+          
+          if (finalDocUrl.startsWith('data:image/')) {
+             const uploadedInfo = await uploadFile(finalDocUrl, `doc_${studentObj?.studentCode || Date.now()}_${file.name}`);
+             if (uploadedInfo && uploadedInfo.length > 0) {
+                 finalDocUrl = uploadedInfo[0].url;
+             }
+          }
+
           const payload = {
-            name: file.name,
+            name: uploadingDocName || file.name,
             type: file.type,
             date: new Date().toLocaleDateString('vi-VN'),
-            url: reader.result as string,
+            url: finalDocUrl,
             student: studentObj?.strapiId || studentId // Use numeric ID for relation
           };
 
@@ -806,9 +878,37 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
         <div className="p-2 border-b border-slate-200 bg-slate-50 flex justify-end gap-2">
           <button onClick={handlePrintRegistrationCard} className="px-5 py-1 bg-white text-blue-600 rounded border border-blue-300 text-[12px] font-bold shadow-sm hover:bg-blue-50 flex items-center gap-1.5 transition-colors"><Printer size={14} /> In Phiếu ĐK Học</button>
-          <button onClick={handleSave} className="px-5 py-1 bg-[#54a0ff] text-white rounded border border-[#2e86de] text-[12px] font-bold shadow-sm hover:brightness-105 flex items-center gap-1.5"><Save size={14} /> Lưu</button>
-          <button onClick={() => { stopCamera(); setIsFormOpen(false); }} className="px-5 py-1 bg-white text-slate-700 rounded border border-slate-300 text-[12px] font-bold shadow-sm outline-none hover:bg-slate-100 transition-colors">Đóng</button>
+          <button
+            onClick={handleSave}
+            disabled={!!duplicateWarning}
+            title={duplicateWarning ? 'Không thể lưu khi có học viên trùng' : ''}
+            className={`px-5 py-1 rounded border text-[12px] font-bold shadow-sm flex items-center gap-1.5 transition-all ${
+              duplicateWarning
+                ? 'bg-slate-300 text-slate-500 border-slate-300 cursor-not-allowed'
+                : 'bg-[#54a0ff] text-white border-[#2e86de] hover:brightness-105'
+            }`}
+          >
+            <Save size={14} /> Lưu
+          </button>
+          <button onClick={() => { stopCamera(); setIsFormOpen(false); setDuplicateWarning(null); }} className="px-5 py-1 bg-white text-slate-700 rounded border border-slate-300 text-[12px] font-bold shadow-sm outline-none hover:bg-slate-100 transition-colors">Đóng</button>
         </div>
+
+        {/* Duplicate Warning Banner */}
+        {duplicateWarning && (
+          <div className="mx-0 px-4 py-2.5 bg-red-50 border-b-2 border-red-400 flex items-center gap-3">
+            <span className="text-red-600 text-lg">🚫</span>
+            <div className="flex-1">
+              <p className="text-red-700 font-bold text-[12px]">{duplicateWarning}</p>
+            </div>
+            <button
+              onClick={() => setDuplicateWarning(null)}
+              className="text-red-400 hover:text-red-600 transition-colors"
+              title="Bỏ qua cảnh báo"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
         <div className="p-6 bg-white overflow-y-auto max-h-[80vh]">
           <div className="grid grid-cols-12 gap-6 h-full">
@@ -965,13 +1065,21 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                   </div>
                   <div className="flex items-center gap-2 col-span-2">
                     <label className="w-32 flex-shrink-0 text-left pl-4 text-[12px] text-slate-600 font-medium whitespace-nowrap">Số CMND/CCCD<span className="text-red-500">*</span>:</label>
-                    <input
-                      type="text"
-                      value={formData.idNumber}
-                      onChange={e => handleIdNumberChange(e.target.value)}
-                      className="flex-1 border border-slate-300 rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none font-mono"
-                      placeholder="Nhập số CCCD/CMND"
-                    />
+                    <div className="flex-1 relative">
+                      <input
+                        type="text"
+                        value={formData.idNumber}
+                        onChange={e => handleIdNumberChange(e.target.value)}
+                        onBlur={handleIdNumberBlur}
+                        className={`w-full border rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none font-mono ${
+                          duplicateWarning ? 'border-red-400 bg-red-50' : 'border-slate-300'
+                        }`}
+                        placeholder="Nhập số CCCD/CMND"
+                      />
+                      {isCheckingDuplicate && (
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 animate-pulse">Đang kiểm tra...</span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Row 4: Ethnicity & Nationality */}
@@ -1154,7 +1262,17 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                   <div className="grid grid-cols-2 gap-3">
                     {/* Front */}
                     <div className="space-y-1">
-                      <span className="text-[10px] text-slate-400 font-medium">Mặt trước:</span>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] text-slate-400 font-medium">Mặt trước:</span>
+                        {editingId && (
+                           <button 
+                             onClick={(e) => handleTriggerUpload(editingId, e, 'CCCD Mặt trước')}
+                             className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-100 transition-colors flex items-center gap-1"
+                           >
+                             <Upload size={10} /> Tải lên
+                           </button>
+                        )}
+                      </div>
                       <div 
                         className="aspect-[1.58/1] bg-slate-100 rounded border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-300 transition-all relative group"
                         onClick={() => {
@@ -1168,7 +1286,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                             className="w-full h-full object-cover" 
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px]">Chưa có ảnh</div>
+                          <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px] bg-white">Chưa có ảnh</div>
                         )}
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                           <Search size={16} className="text-white" />
@@ -1177,7 +1295,17 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                     </div>
                     {/* Back */}
                     <div className="space-y-1">
-                      <span className="text-[10px] text-slate-400 font-medium">Mặt sau:</span>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] text-slate-400 font-medium">Mặt sau:</span>
+                        {editingId && (
+                           <button 
+                             onClick={(e) => handleTriggerUpload(editingId, e, 'CCCD Mặt sau')}
+                             className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-100 transition-colors flex items-center gap-1"
+                           >
+                             <Upload size={10} /> Tải lên
+                           </button>
+                        )}
+                      </div>
                       <div 
                         className="aspect-[1.58/1] bg-slate-100 rounded border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-300 transition-all relative group"
                         onClick={() => {
@@ -1191,7 +1319,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                             className="w-full h-full object-cover" 
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px]">Chưa có ảnh</div>
+                          <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px] bg-white">Chưa có ảnh</div>
                         )}
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                           <Search size={16} className="text-white" />
@@ -1238,9 +1366,13 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                         <span className="text-[10px] text-slate-400">{doc.date} • {doc.type?.split('/')?.[1]?.toUpperCase() || 'FILE'}</span>
                       </div>
                     </div>
-                    <a href={doc.url} download={doc.name} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" title="Tải xuống">
+                    <button 
+                      onClick={() => downloadFile(doc.url, doc.name)} 
+                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" 
+                      title="Tải xuống"
+                    >
                       <Upload size={16} className="rotate-180" />
-                    </a>
+                    </button>
                   </div>
                 ))}
               </div>
@@ -1279,7 +1411,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   return (
     <div className="flex flex-col h-full bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden animate-in fade-in duration-500">
       <div className="bg-[#4a5568] text-white px-3 py-1.5 flex justify-between items-center text-xs font-bold">
-        <div className="flex items-center gap-2"><span>Quản lý học viên (v1.1 - Unfiltered)</span><X size={14} className="cursor-pointer hover:bg-white/10" /></div>
+        <div className="flex items-center gap-2"><span>Quản lý học viên (v1.1 - {selectedClassFilter ? `Lọc: ${selectedClassFilter}` : 'Chưa xếp lớp'})</span><X size={14} className="cursor-pointer hover:bg-white/10" /></div>
       </div>
 
       {isFormOpen && renderStudentForm()}
@@ -1290,16 +1422,25 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Tìm kiếm theo Tên, Mã học viên..."
+            placeholder="Tìm kiếm: Họ tên, CCCD (Enter)..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setCurrentPage(1);
+                setSearchTermServer(searchTerm);
+              }
+            }}
             className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 ring-blue-500/20"
           />
         </div>
-        <div className="w-[180px]">
+        <div className="w-[450px]">
           <select
             value={selectedClassFilter}
-            onChange={(e) => setSelectedClassFilter(e.target.value)}
+            onChange={(e) => {
+              setSelectedClassFilter(e.target.value);
+              setCurrentPage(1);
+            }}
             className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 ring-blue-500/20 bg-white"
           >
             <option value="">-- Tất cả lớp --</option>
@@ -1319,17 +1460,13 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         <table className="w-full text-left border-collapse min-w-[1200px] table-fixed">
           <thead className="bg-[#f8f9fa] sticky top-0 z-10 shadow-sm">
             <tr className="border-b border-slate-200 bg-white">
-              <th className="w-10 border-r px-2 py-2 text-center"><Filter size={14} className="text-slate-400 mx-auto" /></th>
-              <th className="w-10 border-r px-2 py-2 text-center"><input type="checkbox" onChange={e => e.target.checked ? setSelectedIds(new Set(filteredStudents.map(s => s.id))) : setSelectedIds(new Set())} checked={selectedIds.size === filteredStudents.length && filteredStudents.length > 0} /></th>
-              <th className="w-12 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">STT</th>
               <th className="w-16 border-r px-2 py-2 text-center text-[12px] font-bold text-slate-700">Ảnh (3x4)</th>
               <th className="w-32 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Mã HV (CCCD)</th>
-              <th className="w-48 border-r px-3 py-2 text-[12px] font-bold text-slate-700">Họ và Tên</th>
-              <th className="w-32 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Ngày sinh</th>
-              <th className="w-24 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Giới tính</th>
-              <th className="w-48 border-r px-3 py-2 text-[12px] font-bold text-slate-700">Lớp học</th>
-
-              <th className="w-32 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Điện thoại</th>
+              <th className="w-56 border-r px-3 py-2 text-[12px] font-bold text-slate-700">Họ và Tên</th>
+              <th className="w-28 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Ngày sinh</th>
+              <th className="w-20 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Giới tính</th>
+              <th className="w-80 border-r px-3 py-2 text-[12px] font-bold text-slate-700">Lớp học</th>
+              <th className="w-28 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Điện thoại</th>
               <th className="w-24 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Hồ sơ HV</th>
               <th className="w-28 border-r px-3 py-2 text-center text-[12px] font-bold text-slate-700">Trạng thái</th>
               <th className="w-24 px-3 py-2 text-center text-[12px] font-bold text-slate-700">Thao tác</th>
@@ -1337,10 +1474,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
           </thead>
           <tbody className="bg-white">
             {filteredStudents.map((s) => (
-              <tr key={s.id} className={`border-b hover:bg-[#e3f2fd] transition-colors text-[12px] ${selectedIds.has(s.id) ? 'bg-[#bbdefb]' : ''}`} onClick={() => setSelectedIds(prev => { const next = new Set(prev); if (next.has(s.id)) next.delete(s.id); else next.add(s.id); return next; })}>
-                <td className="border-r px-2 py-1.5 text-center"><ChevronDown size={14} className="text-slate-400 mx-auto -rotate-90" /></td>
-                <td className="border-r px-2 py-1.5 text-center"><input type="checkbox" checked={selectedIds.has(s.id)} onChange={e => { e.stopPropagation(); setSelectedIds(prev => { const next = new Set(prev); if (next.has(s.id)) next.delete(s.id); else next.add(s.id); return next; }); }} /></td>
-                <td className="border-r px-3 py-1.5 text-center text-slate-500">{s.stt}</td>
+              <tr key={s.id} className="border-b hover:bg-[#e3f2fd] transition-colors text-[12px]">
                 <td className="border-r px-2 py-1.5 text-center">
                   <div className="w-[36px] h-[48px] mx-auto rounded overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center shadow-sm">
                     {s.photo ? (
@@ -1357,7 +1491,6 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                 </td>
                 <td className="border-r px-3 py-1.5 text-center">{s.gender}</td>
                 <td className="border-r px-3 py-1.5 font-medium text-indigo-700 truncate">{s.group}</td>
-
                 <td className="border-r px-3 py-1.5 text-center">{s.phone || '--'}</td>
                 <td className="border-r px-3 py-1.5 text-center">
                   <div className="flex flex-col items-center gap-1">
@@ -1384,8 +1517,35 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                   </button>
                 </td>
                 <td className="px-3 py-1.5">
-                  <div className="flex justify-center gap-2">
+                  <div className="flex justify-center gap-1.5">
                     <button onClick={(e) => handleEdit(s, e)} className="p-1 text-blue-600 hover:bg-blue-100 rounded" title="Sửa"><Edit3 size={16} /></button>
+                    {onRegisterAnother && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRegisterAnother({
+                            fullName: s.fullName,
+                            dob: s.dob,
+                            pob: s.pob,
+                            studentCode: s.studentCode,
+                            idNumber: s.idNumber || s.studentCode,
+                            phone: s.phone,
+                            gender: s.gender,
+                            photo: s.photo,
+                            email: (s as any).email || '',
+                            ethnicity: (s as any).ethnicity || '',
+                            address: (s as any).address || '',
+                            company: (s as any).company || '',
+                            nationality: (s as any).nationality || 'Việt Nam',
+                            documents: (s as any).documents || [],
+                          });
+                        }}
+                        className="p-1 text-green-600 hover:bg-green-100 rounded transition-colors"
+                        title="Đăng ký lớp mới cho học viên này"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    )}
                     <button onClick={(e) => handleDeleteRow(s.id, e)} className="p-1 text-red-600 hover:bg-red-100 rounded" title="Xóa"><Trash2 size={16} /></button>
                   </div>
                 </td>
@@ -1393,15 +1553,30 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
             ))}
             {filteredStudents.length === 0 && (
               <tr>
-                <td colSpan={11} className="py-20 text-center text-slate-400 italic">Không tìm thấy học viên nào phù hợp với từ khóa "{searchTerm}"</td>
+                <td colSpan={10} className="py-20 text-center text-slate-400 italic">Không tìm thấy học viên nào phù hợp với từ khóa "{searchTerm}"</td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
       <div className="bg-slate-50 border-t px-4 py-1.5 flex justify-between items-center text-[11px] text-slate-500 font-medium">
-        <div>Hiển thị {filteredStudents.length} / {students.length} học viên</div>
-        <div>{selectedIds.size > 0 && <span className="text-blue-600 font-bold mr-4">Đang chọn: {selectedIds.size}</span>}Trang 1 / 1</div>
+        <div>Tổng số bản ghi: {totalStudents} học viên (Trang {currentPage})</div>
+        <div className="flex gap-4 items-center">
+          {selectedIds.size > 0 && <span className="text-blue-600 font-bold mr-4">Đang chọn: {selectedIds.size}</span>}
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+              disabled={currentPage === 1}
+              className="px-2 py-1 border rounded bg-white hover:bg-slate-200 disabled:opacity-50"
+            >« Trước</button>
+            <span className="font-bold text-blue-600 px-2">Trang {currentPage} / {Math.ceil(totalStudents / pageSize) || 1}</span>
+            <button 
+              onClick={() => setCurrentPage(p => p + 1)} 
+              disabled={currentPage >= Math.ceil(totalStudents / pageSize)}
+              className="px-2 py-1 border rounded bg-white hover:bg-slate-200 disabled:opacity-50"
+            >Sau »</button>
+          </div>
+        </div>
       </div>
       <input type="file" ref={docInputRef} hidden onChange={handleFileChange} />
       {renderDocsModal()}
