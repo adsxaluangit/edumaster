@@ -96,8 +96,13 @@ const App: React.FC = () => {
   };
 
   const handleRegisterAnother = (student: any) => {
-    setPrefilledStudent(student);
-    handleNavigate('students');
+    // Clear first so useEffect in StudentsView always re-fires,
+    // even when already on the 'students' page.
+    setPrefilledStudent(null);
+    setTimeout(() => {
+      setPrefilledStudent(student);
+      handleNavigate('students');
+    }, 0);
   };
 
   const renderContent = () => {
@@ -107,7 +112,7 @@ const App: React.FC = () => {
       case 'admin': return <AdminView />;
       case 'categories': return <CategoriesView />;
       case 'print-templates': return <PrintTemplatesView />;
-      case 'students': return <StudentsView prefilledStudent={prefilledStudent} onClearPrefill={() => setPrefilledStudent(null)} />;
+      case 'students': return <StudentsView prefilledStudent={prefilledStudent} onClearPrefill={() => setPrefilledStudent(null)} onRegisterAnother={handleRegisterAnother} />;
       case 'assignments': return <AssignmentsView />;
       case 'decisions': return <DecisionsView mode="OPENING" currentUser={currentUser} />;
       case 'exam-approval': return <ExamApprovalView />;

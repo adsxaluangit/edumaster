@@ -14,9 +14,10 @@ import { downloadFile } from '../utils/fileUtils';
 interface StudentsViewProps {
   prefilledStudent?: any;
   onClearPrefill?: () => void;
+  onRegisterAnother?: (student: any) => void;
 }
 
-const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPrefill }) => {
+const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPrefill, onRegisterAnother }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClassFilter, setSelectedClassFilter] = useState('');
@@ -50,6 +51,9 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   // --- Duplicate guard state ---
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
   const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
+
+  // --- Docs to copy from source student when using "+" button ---
+  const [prefilledStudentDocs, setPrefilledStudentDocs] = useState<any[]>([]);
 
   const [formData, setFormData] = useState({
     studentCode: '',
@@ -99,7 +103,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       group: classObj?.name || data.group || '', // Prefer relation name
       classCode: classObj?.code || data.class_code || '',
       className: classObj?.name || data.class_name || '',
-      classId: String(classObj?.id || ''),
+      classId: String(classObj?.id || ''),      // numeric id from raw school_class relation (consistent with strapiId)
       cardNumber: data.card_number || '', // If used
       isApproved: data.is_approved || false,
       notes: data.notes || '',
@@ -164,24 +168,29 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
   useEffect(() => {
     if (prefilledStudent) {
+      // idNumber fallback: old records may have CCCD only in student_code
+      const idNum = prefilledStudent.idNumber || prefilledStudent.studentCode || '';
       setFormData({
-        studentCode: prefilledStudent.studentCode || '',
+        studentCode: idNum,  // reuse CCCD as studentCode for new registration
         fullName: prefilledStudent.fullName || '',
         dob: prefilledStudent.dob ? (prefilledStudent.dob.includes('-') ? prefilledStudent.dob.split('-').reverse().join(',') : prefilledStudent.dob) : '',
         pob: prefilledStudent.pob || '',
         ethnicity: prefilledStudent.ethnicity || '',
         phone: prefilledStudent.phone || '',
-        idNumber: prefilledStudent.idNumber || '',
-        group: '', 
+        idNumber: idNum,
+        group: '',
         classCode: '',
-        classId: '', 
+        classId: '',
         nationality: prefilledStudent.nationality || 'Việt Nam',
         address: prefilledStudent.address || '',
+        company: prefilledStudent.company || '',  // Đơn vị công tác
         gender: prefilledStudent.gender || 'Nam',
         cardNumber: prefilledStudent.cardNumber || ''
-      });
+      } as any);
       setStudentPhoto(prefilledStudent.photo || null);
-      setEditingId(null); 
+      // Store source documents to copy after save
+      setPrefilledStudentDocs(prefilledStudent.documents || []);
+      setEditingId(null);
       setIsFormOpen(true);
       if (onClearPrefill) onClearPrefill();
     }
@@ -215,16 +224,20 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   // Handle class selection change
   const handleClassChange = (className: string) => {
     const selectedClass = availableClasses.find(c => c.name === className);
-    const newClassId = selectedClass ? String(selectedClass.documentId || selectedClass.id || '') : '';
+    // After normalizeStrapiList: .id = documentId (string), .strapiId = numeric id
+    // Strapi relation needs numeric id (strapiId) to avoid locale:null error
+    const numericId = selectedClass ? String(selectedClass.strapiId || '') : '';
+    // checkDuplicate backend uses document_id column, so pass documentId (.id)
+    const docId = selectedClass ? String(selectedClass.id || '') : '';
     setFormData({
       ...formData,
       group: className,
       classCode: selectedClass ? selectedClass.code : '',
-      classId: newClassId
+      classId: numericId  // numeric strapiId for school_class relation
     });
-    // Real-time duplicate check when class changes
-    if (formData.idNumber && newClassId) {
-      runDuplicateCheck(formData.idNumber, newClassId, editingId);
+    // Real-time duplicate check uses documentId
+    if (formData.idNumber && docId) {
+      runDuplicateCheck(formData.idNumber, docId, editingId);
     } else {
       setDuplicateWarning(null);
     }
@@ -247,7 +260,13 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   // Real-time check on CCCD blur
   const handleIdNumberBlur = () => {
     if (formData.idNumber && formData.classId) {
-      runDuplicateCheck(formData.idNumber, formData.classId, editingId);
+      // classId in formData = numeric strapiId OR documentId from existing student
+      // Find class by matching either strapiId or documentId
+      const cls = availableClasses.find(
+        (c: any) => String(c.strapiId) === formData.classId || String(c.id) === formData.classId
+      );
+      const docId = cls ? String(cls.id) : formData.classId; // cls.id = documentId after normalization
+      runDuplicateCheck(formData.idNumber, docId, editingId);
     }
   };
 
@@ -389,7 +408,14 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
     // --- HARD BLOCK: Kiểm tra trùng lập tại cơ sở dữ liệu ---
     if (formData.idNumber && formData.classId) {
-      const dupResult = await checkDuplicateStudent(formData.idNumber, formData.classId, editingId || undefined);
+      // classId could be numeric strapiId (new selection) or documentId (from existing student data)
+      // Find matching class by either strapiId or documentId (.id)
+      const classForCheck = availableClasses.find(
+        (c: any) => String(c.strapiId) === formData.classId || String(c.id) === formData.classId
+      );
+      // After normalizeStrapiList: c.id = documentId
+      const classDocId = classForCheck ? String(classForCheck.id) : formData.classId;
+      const dupResult = await checkDuplicateStudent(formData.idNumber, classDocId, editingId || undefined);
       if (dupResult.exists) {
         alert(`KHÔNG THỂ LƯU\n\nHọc viên có số CCCD ${formData.idNumber} đã đăng ký lớp này rồi (${dupResult.count} lần).\nVui lòng kiểm tra lại!`);
         setDuplicateWarning(`⚠️ Học viên CCCD ${formData.idNumber} đã đăng ký lớp này rồi (${dupResult.count} lần). Không thể đăng ký trùng!`);
@@ -491,7 +517,6 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         if (studentPhoto && studentPhoto.startsWith('data:image/')) {
           const uploadedInfo = await uploadFile(studentPhoto, `avatar_${formData.studentCode || Date.now()}.jpg`);
           if (uploadedInfo && uploadedInfo.length > 0) {
-            // Strapi sets uploadedInfo[0].url. Make sure to get url!
             finalPhotoUrl = uploadedInfo[0].url; 
           }
         }
@@ -501,12 +526,34 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         if (editingId) {
           await updateCategory(COLLECTIONS.STUDENTS, editingId, payload);
         } else {
-          await createCategory(COLLECTIONS.STUDENTS, payload);
+          const newStudent = await createCategory(COLLECTIONS.STUDENTS, payload);
+
+          // --- Copy documents from source student ("+ Đăng ký lớp mới" flow) ---
+          if (prefilledStudentDocs.length > 0 && newStudent) {
+            const newStudentId = newStudent.id || newStudent.documentId;
+            if (newStudentId) {
+              for (const doc of prefilledStudentDocs) {
+                if (doc.url && doc.name) {
+                  try {
+                    await createCategory(COLLECTIONS.STUDENT_DOCUMENTS, {
+                      name: doc.name,
+                      url: doc.url,
+                      type: doc.type || 'application/pdf',
+                      student: newStudentId,
+                    });
+                  } catch (docErr) {
+                    console.warn('Failed to copy document:', doc.name, docErr);
+                  }
+                }
+              }
+            }
+            setPrefilledStudentDocs([]);
+          }
+          // -------------------------------------------------------------------
         }
         alert(editingId ? 'Cập nhật thành công!' : 'Thêm mới thành công!');
         setIsFormOpen(false);
         setEditingId(null);
-        // Re-fetch handled explicitly after successful save
         loadData();
       } catch (e) {
         console.error(e);
@@ -1470,8 +1517,35 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                   </button>
                 </td>
                 <td className="px-3 py-1.5">
-                  <div className="flex justify-center gap-2">
+                  <div className="flex justify-center gap-1.5">
                     <button onClick={(e) => handleEdit(s, e)} className="p-1 text-blue-600 hover:bg-blue-100 rounded" title="Sửa"><Edit3 size={16} /></button>
+                    {onRegisterAnother && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRegisterAnother({
+                            fullName: s.fullName,
+                            dob: s.dob,
+                            pob: s.pob,
+                            studentCode: s.studentCode,
+                            idNumber: s.idNumber || s.studentCode,
+                            phone: s.phone,
+                            gender: s.gender,
+                            photo: s.photo,
+                            email: (s as any).email || '',
+                            ethnicity: (s as any).ethnicity || '',
+                            address: (s as any).address || '',
+                            company: (s as any).company || '',
+                            nationality: (s as any).nationality || 'Việt Nam',
+                            documents: (s as any).documents || [],
+                          });
+                        }}
+                        className="p-1 text-green-600 hover:bg-green-100 rounded transition-colors"
+                        title="Đăng ký lớp mới cho học viên này"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    )}
                     <button onClick={(e) => handleDeleteRow(s.id, e)} className="p-1 text-red-600 hover:bg-red-100 rounded" title="Xóa"><Trash2 size={16} /></button>
                   </div>
                 </td>
