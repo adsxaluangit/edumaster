@@ -314,6 +314,24 @@ export const uploadFile = async (base64Data: string, filename: string) => {
     }
 };
 
+// --- Duplicate Check ---
+// Ki\u1ec3m tra h\u1ecdc vi\u00ean c\u00f3 \u0111\u00e3 \u0111\u0103ng k\u00fd l\u1edbp n\u00e0y ch\u01b0a d\u1ef1a v\u00e0o id_number + class documentId
+export const checkDuplicateStudent = async (
+    idNumber: string,
+    classDocumentId: string,
+    excludeStudentId?: string
+): Promise<{ exists: boolean; count: number; students: { id: string; fullName: string; idNumber: string; className: string }[] }> => {
+    try {
+        let url = `/students/check-duplicate?id_number=${encodeURIComponent(idNumber)}&class_id=${encodeURIComponent(classDocumentId)}`;
+        if (excludeStudentId) url += `&exclude_student_id=${encodeURIComponent(excludeStudentId)}`;
+        const res = await strapiRequest(url);
+        return res || { exists: false, count: 0, students: [] };
+    } catch (e) {
+        console.error('[checkDuplicateStudent]', e);
+        return { exists: false, count: 0, students: [] };
+    }
+};
+
 // Mapping for collection names
 export const COLLECTIONS = {
     NATIONS: 'nations',

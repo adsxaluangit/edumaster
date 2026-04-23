@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { FileSpreadsheet, RefreshCw, Trash2, Plus, Search, Filter, ChevronDown, X, Camera, Save, Calendar, User, Upload, Check, Phone, MapPin, Briefcase, Flag, School, Edit3, Image as ImageIcon, FileText, CheckCircle2, XCircle, ShieldCheck, Printer } from 'lucide-react';
 import { Student } from '../types';
 import { MOCK_STUDENTS, MOCK_NATIONS, MOCK_CLASSES } from '../mockData';
-import { fetchCategory, fetchCategoryPaginated, createCategory, updateCategory, deleteCategory, COLLECTIONS, uploadFile } from '../services/api';
+import { fetchCategory, fetchCategoryPaginated, createCategory, updateCategory, deleteCategory, COLLECTIONS, uploadFile, checkDuplicateStudent } from '../services/api';
 import { formatDate, parseToISO } from '../utils/dateUtils';
 import { downloadFile } from '../utils/fileUtils';
 
@@ -46,6 +46,10 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   const [viewingDocsStudentId, setViewingDocsStudentId] = useState<string | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
+
+  // --- Duplicate guard state ---
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
 
   const [formData, setFormData] = useState({
     studentCode: '',
@@ -191,15 +195,39 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   // When class filter active: frontend also strips out students assigned to OPENING decisions (see loadData above)
   const filteredStudents = students;
 
+  // --- Duplicate check helper (called on CCCD blur / class change) ---
+  const runDuplicateCheck = async (idNumber: string, classId: string, excludeId?: string | null) => {
+    setDuplicateWarning(null);
+    if (!idNumber || idNumber.length < 9 || !classId) return;
+    setIsCheckingDuplicate(true);
+    try {
+      const result = await checkDuplicateStudent(idNumber, classId, excludeId || undefined);
+      if (result.exists) {
+        setDuplicateWarning(
+          `⚠️ Học viên CCCD ${idNumber} đã đăng ký lớp này rồi (${result.count} lần). Không thể đăng ký trùng!`
+        );
+      }
+    } finally {
+      setIsCheckingDuplicate(false);
+    }
+  };
+
   // Handle class selection change
   const handleClassChange = (className: string) => {
     const selectedClass = availableClasses.find(c => c.name === className);
+    const newClassId = selectedClass ? String(selectedClass.documentId || selectedClass.id || '') : '';
     setFormData({
       ...formData,
       group: className,
       classCode: selectedClass ? selectedClass.code : '',
-      classId: selectedClass ? (selectedClass.strapiId || selectedClass.id) : ''
+      classId: newClassId
     });
+    // Real-time duplicate check when class changes
+    if (formData.idNumber && newClassId) {
+      runDuplicateCheck(formData.idNumber, newClassId, editingId);
+    } else {
+      setDuplicateWarning(null);
+    }
   };
 
   // Handle ID Number change (syncs with studentCode)
@@ -211,6 +239,15 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         idNumber: cleanedVal,
         studentCode: cleanedVal
       });
+      // Clear warning when user changes CCCD
+      setDuplicateWarning(null);
+    }
+  };
+
+  // Real-time check on CCCD blur
+  const handleIdNumberBlur = () => {
+    if (formData.idNumber && formData.classId) {
+      runDuplicateCheck(formData.idNumber, formData.classId, editingId);
     }
   };
 
@@ -316,7 +353,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.fullName || !formData.group || !formData.idNumber || !formData.dob) {
       alert('Vui lòng nhập đầy đủ: Họ tên, Ngày sinh, Lớp học và Số CMND/CCCD!');
       return;
@@ -349,6 +386,17 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
     const currentClassId = formData.classId;
     const currentClassName = formData.group.trim().toLowerCase();
     const currentIdNumber = formData.idNumber.trim();
+
+    // --- HARD BLOCK: Kiểm tra trùng lập tại cơ sở dữ liệu ---
+    if (formData.idNumber && formData.classId) {
+      const dupResult = await checkDuplicateStudent(formData.idNumber, formData.classId, editingId || undefined);
+      if (dupResult.exists) {
+        alert(`KHÔNG THỂ LƯU\n\nHọc viên có số CCCD ${formData.idNumber} đã đăng ký lớp này rồi (${dupResult.count} lần).\nVui lòng kiểm tra lại!`);
+        setDuplicateWarning(`⚠️ Học viên CCCD ${formData.idNumber} đã đăng ký lớp này rồi (${dupResult.count} lần). Không thể đăng ký trùng!`);
+        return;
+      }
+    }
+    // ---------------------------------------------------------------
 
     // 1. Check if already enrolled in the ACTIVE students list for THIS class
     if (!editingId) {
@@ -783,9 +831,37 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
         <div className="p-2 border-b border-slate-200 bg-slate-50 flex justify-end gap-2">
           <button onClick={handlePrintRegistrationCard} className="px-5 py-1 bg-white text-blue-600 rounded border border-blue-300 text-[12px] font-bold shadow-sm hover:bg-blue-50 flex items-center gap-1.5 transition-colors"><Printer size={14} /> In Phiếu ĐK Học</button>
-          <button onClick={handleSave} className="px-5 py-1 bg-[#54a0ff] text-white rounded border border-[#2e86de] text-[12px] font-bold shadow-sm hover:brightness-105 flex items-center gap-1.5"><Save size={14} /> Lưu</button>
-          <button onClick={() => { stopCamera(); setIsFormOpen(false); }} className="px-5 py-1 bg-white text-slate-700 rounded border border-slate-300 text-[12px] font-bold shadow-sm outline-none hover:bg-slate-100 transition-colors">Đóng</button>
+          <button
+            onClick={handleSave}
+            disabled={!!duplicateWarning}
+            title={duplicateWarning ? 'Không thể lưu khi có học viên trùng' : ''}
+            className={`px-5 py-1 rounded border text-[12px] font-bold shadow-sm flex items-center gap-1.5 transition-all ${
+              duplicateWarning
+                ? 'bg-slate-300 text-slate-500 border-slate-300 cursor-not-allowed'
+                : 'bg-[#54a0ff] text-white border-[#2e86de] hover:brightness-105'
+            }`}
+          >
+            <Save size={14} /> Lưu
+          </button>
+          <button onClick={() => { stopCamera(); setIsFormOpen(false); setDuplicateWarning(null); }} className="px-5 py-1 bg-white text-slate-700 rounded border border-slate-300 text-[12px] font-bold shadow-sm outline-none hover:bg-slate-100 transition-colors">Đóng</button>
         </div>
+
+        {/* Duplicate Warning Banner */}
+        {duplicateWarning && (
+          <div className="mx-0 px-4 py-2.5 bg-red-50 border-b-2 border-red-400 flex items-center gap-3">
+            <span className="text-red-600 text-lg">🚫</span>
+            <div className="flex-1">
+              <p className="text-red-700 font-bold text-[12px]">{duplicateWarning}</p>
+            </div>
+            <button
+              onClick={() => setDuplicateWarning(null)}
+              className="text-red-400 hover:text-red-600 transition-colors"
+              title="Bỏ qua cảnh báo"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
         <div className="p-6 bg-white overflow-y-auto max-h-[80vh]">
           <div className="grid grid-cols-12 gap-6 h-full">
@@ -942,13 +1018,21 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                   </div>
                   <div className="flex items-center gap-2 col-span-2">
                     <label className="w-32 flex-shrink-0 text-left pl-4 text-[12px] text-slate-600 font-medium whitespace-nowrap">Số CMND/CCCD<span className="text-red-500">*</span>:</label>
-                    <input
-                      type="text"
-                      value={formData.idNumber}
-                      onChange={e => handleIdNumberChange(e.target.value)}
-                      className="flex-1 border border-slate-300 rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none font-mono"
-                      placeholder="Nhập số CCCD/CMND"
-                    />
+                    <div className="flex-1 relative">
+                      <input
+                        type="text"
+                        value={formData.idNumber}
+                        onChange={e => handleIdNumberChange(e.target.value)}
+                        onBlur={handleIdNumberBlur}
+                        className={`w-full border rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none font-mono ${
+                          duplicateWarning ? 'border-red-400 bg-red-50' : 'border-slate-300'
+                        }`}
+                        placeholder="Nhập số CCCD/CMND"
+                      />
+                      {isCheckingDuplicate && (
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 animate-pulse">Đang kiểm tra...</span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Row 4: Ethnicity & Nationality */}
