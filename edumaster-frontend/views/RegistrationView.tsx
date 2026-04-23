@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Camera, X, Upload, Save, CheckCircle, LogIn, Lock, User, ChevronDown, AlertCircle } from 'lucide-react';
 import { Student } from '../types';
 import { MOCK_STUDENTS, MOCK_NATIONS, MOCK_CLASSES } from '../mockData';
-import { fetchCategory, createCategory, COLLECTIONS, uploadFile } from '../services/api';
+import { fetchCategory, createCategory, COLLECTIONS, uploadFile, checkDuplicateStudent } from '../services/api';
 import { parseToISO } from '../utils/dateUtils';
 
 const compressImage = (file: File, maxWidth: number = 1200): Promise<string> => {
@@ -91,6 +91,29 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
     const [existingData, setExistingData] = useState<any>(null);
     const [isCheckingId, setIsCheckingId] = useState(false);
 
+    // --- Duplicate guard ---
+    const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+    const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
+
+    const runDuplicateCheck = async (idNumber: string, classCode: string) => {
+        setDuplicateWarning(null);
+        if (!idNumber || idNumber.length < 9 || !classCode) return;
+        const selectedClass = availableClasses.find((c: any) => c.code === classCode);
+        const classDocId = selectedClass ? String(selectedClass.documentId || selectedClass.id || '') : '';
+        if (!classDocId) return;
+        setIsCheckingDuplicate(true);
+        try {
+            const result = await checkDuplicateStudent(idNumber, classDocId);
+            if (result.exists) {
+                setDuplicateWarning(
+                    `Bạn (CCCD: ${idNumber}) đã đăng ký lớp này rồi (${result.count} lần). Vui lòng chọn lớp khác hoặc liên hệ nhà trường!`
+                );
+            }
+        } finally {
+            setIsCheckingDuplicate(false);
+        }
+    };
+
     // Load available classes from API
     useEffect(() => {
         const loadClasses = async () => {
@@ -163,6 +186,23 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
             alert('Vui lòng nhập chính xác 12 số CCCD/CMND!');
             return;
         }
+
+        // --- HARD BLOCK: Kiểm tra trùng lập tại DB ---
+        const selectedClassForCheck = availableClasses.find((c: any) => c.code === formData.classCode);
+        const classDocIdForCheck = selectedClassForCheck
+            ? String(selectedClassForCheck.documentId || selectedClassForCheck.id || '')
+            : '';
+        if (classDocIdForCheck) {
+            const dupResult = await checkDuplicateStudent(formData.idNumber, classDocIdForCheck);
+            if (dupResult.exists) {
+                setDuplicateWarning(
+                    `Bạn (CCCD: ${formData.idNumber}) đã đăng ký lớp này rồi (${dupResult.count} lần). Vui lòng chọn lớp khác hoặc liên hệ nhà trường!`
+                );
+                alert(`KHÔNG THỂ ĐĂNG KÝ\n\nBạn có CCCD ${formData.idNumber} đã đăng ký lớp này rồi (${dupResult.count} lần).\n\nVui lòng chọn lớp khác hoặc liên hệ nhà trường để được hỗ trợ.`);
+                return;
+            }
+        }
+        // --------------------------------------------------
 
         const nameParts = formData.fullName.trim().split(' ');
         const firstName = nameParts.length > 1 ? nameParts.pop() || '' : formData.fullName;
@@ -574,18 +614,36 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                     </label>
                                     <select
                                         value={formData.classCode}
-                                        onChange={e => setFormData({ ...formData, classCode: e.target.value })}
+                                        onChange={e => {
+                                            const newCode = e.target.value;
+                                            setFormData({ ...formData, classCode: newCode });
+                                            setDuplicateWarning(null);
+                                            if (formData.idNumber.length === 12 && newCode) {
+                                                runDuplicateCheck(formData.idNumber, newCode);
+                                            }
+                                        }}
                                         required
                                         className={`w-full px-4 py-2 border rounded focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none ${
-                                            !formData.classCode ? 'border-red-400 bg-red-50' : 'border-slate-300'
+                                            duplicateWarning ? 'border-red-400 bg-red-50'
+                                            : !formData.classCode ? 'border-red-400 bg-red-50'
+                                            : 'border-slate-300'
                                         }`}
                                     >
                                         <option value="">-- Chọn lớp muốn học --</option>
-                                        {availableClasses.map(cls => (
+                                        {availableClasses.map((cls: any) => (
                                             <option key={cls.id} value={cls.code}>{cls.name}</option>
                                         ))}
                                     </select>
-                                    {!formData.classCode && (
+                                    {isCheckingDuplicate && (
+                                        <p className="text-xs text-blue-500 mt-1 animate-pulse">Đang kiểm tra trùng lớp...</p>
+                                    )}
+                                    {duplicateWarning && !isCheckingDuplicate && (
+                                        <div className="mt-2 p-3 bg-red-50 border border-red-300 rounded-lg flex items-start gap-2">
+                                            <span className="text-red-500 text-base shrink-0">🚫</span>
+                                            <p className="text-red-700 font-bold text-xs">{duplicateWarning}</p>
+                                        </div>
+                                    )}
+                                    {!formData.classCode && !duplicateWarning && (
                                         <p className="text-red-500 text-xs mt-1">※ Bắt buộc phải chọn lớp học</p>
                                     )}
                                 </div>
@@ -660,9 +718,14 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                         <div className="mt-8 pt-6 border-t border-slate-100 flex justify-end">
                             <button
                                 type="submit"
-                                className="px-8 py-3 bg-blue-600 text-white font-bold rounded-lg shadow-lg shadow-blue-500/30 hover:bg-blue-700 hover:-translate-y-0.5 transition-all text-sm flex items-center gap-2"
+                                disabled={!!duplicateWarning}
+                                className={`px-8 py-3 font-bold rounded-lg shadow-lg text-sm flex items-center gap-2 transition-all ${
+                                    duplicateWarning
+                                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                                        : 'bg-blue-600 text-white shadow-blue-500/30 hover:bg-blue-700 hover:-translate-y-0.5'
+                                }`}
                             >
-                                <Save size={18} /> GỬI ĐĂNG KÝ
+                                <Save size={18} /> GỬi ĐĂNG KÝ
                             </button>
                         </div>
                     </form>

@@ -6,6 +6,54 @@ import { factories } from '@strapi/strapi'
 
 export default factories.createCoreController('api::student.student', ({ strapi }) => ({
 
+  // Endpoint: GET /api/students/check-duplicate
+  // Kiểm tra học viên đã đăng ký lớp này chưa dựa vào id_number + class_id
+  // Params: ?id_number=<cccd>&class_id=<documentId>&exclude_student_id=<documentId optional>
+  async checkDuplicate(ctx) {
+    try {
+      const { id_number, class_id, exclude_student_id } = ctx.query as any;
+
+      if (!id_number || !class_id) {
+        return { exists: false, count: 0, students: [] };
+      }
+
+      const knex = strapi.db.connection;
+
+      let query = knex('students as s')
+        .join('students_school_class_lnk as lnk', 's.id', 'lnk.student_id')
+        .join('classes as cls', 'cls.id', 'lnk.school_class_id')
+        .where(function() {
+          this.where('s.id_number', id_number)
+            .orWhere('s.student_code', id_number)
+            .orWhere('s.card_number', id_number);
+        })
+        .where('cls.document_id', class_id)
+        .select('s.id', 's.document_id as documentId', 's.full_name', 's.id_number', 'cls.name as class_name');
+
+      // Khi đang edit, loại bỏ chính học viên đó khỏi kết quả
+      if (exclude_student_id) {
+        query = query.whereNot('s.document_id', exclude_student_id);
+      }
+
+      const rows = await query;
+
+      return {
+        exists: rows.length > 0,
+        count: rows.length,
+        students: rows.map((r: any) => ({
+          id: r.documentId,
+          fullName: r.full_name,
+          idNumber: r.id_number,
+          className: r.class_name,
+        }))
+      };
+    } catch (err: any) {
+      console.error('[checkDuplicate]', err);
+      // Không throw — trả về false để không block UX khi backend lỗi
+      return { exists: false, count: 0, students: [] };
+    }
+  },
+
   // Endpoint: GET /api/students/unassigned
   // Returns paginated students NOT in any OPENING or RECOGNITION decision
   async findUnassigned(ctx) {

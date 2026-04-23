@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, List, Search, Trash2, Edit, UserPlus, Save, FileText, Calendar, Users, FileDown, GraduationCap, School, Paperclip, Upload, Printer, IdCard, FileSpreadsheet, History, Clock, ShieldCheck, ScrollText, Camera, Image as ImageIcon } from 'lucide-react';
+import { Plus, X, List, Search, Trash2, Edit, UserPlus, Save, FileText, Calendar, Users, FileDown, GraduationCap, School, Paperclip, Upload, Printer, IdCard, FileSpreadsheet, History, Clock, ShieldCheck, ScrollText, Camera, Image as ImageIcon, Download, Loader2 } from 'lucide-react';
+import JSZip from 'jszip';
 import { Student } from '../types';
 import { fetchCategory, fetchCategoryAll, createCategory, updateCategory, deleteCategory, COLLECTIONS, createLog, uploadFile } from '../services/api';
 import ExcelJS from 'exceljs';
 import { formatDate, parseToISO } from '../utils/dateUtils';
+import { downloadFile } from '../utils/fileUtils';
 
 interface DecisionDetail {
   id: string;
@@ -90,6 +92,9 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   const editVideoRef = useRef<HTMLVideoElement>(null);
   const editCanvasRef = useRef<HTMLCanvasElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Photo download state
+  const [isDownloadingPhotos, setIsDownloadingPhotos] = useState(false);
 
   // Audit Log State
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
@@ -362,9 +367,9 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   };
 
   const loadDecisions = async () => {
-    // We need deep populate to get students' documents within the decision
+    // We need deep populate to get students' documents and photo within the decision
     // Note: Using explicit relation population (true) instead of * to avoid validation errors with deep nested relations
-    const data = await fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?sort[0]=signed_date:desc&sort[1]=id:desc&populate[school_class]=true&populate[related_decision]=true&populate[students][populate][documents][fields][0]=name&populate[students][populate][documents][fields][1]=url&populate[students][populate][documents][fields][2]=type`);
+    const data = await fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?sort[0]=signed_date:desc&sort[1]=id:desc&populate[school_class]=true&populate[related_decision]=true&populate[students][populate][documents][fields][0]=name&populate[students][populate][documents][fields][1]=url&populate[students][populate][documents][fields][2]=type&populate[students][fields][0]=full_name&populate[students][fields][1]=dob&populate[students][fields][2]=gender&populate[students][fields][3]=card_number&populate[students][fields][4]=id_number&populate[students][fields][5]=student_code&populate[students][fields][6]=pob&populate[students][fields][7]=photo`);
     if (data) {
       const mapped = data.map((d: any, index: number) => {
         const classData = d.school_class?.data || d.school_class;
@@ -460,7 +465,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         } as Student;
       });
     } catch (e) {
-      console.error('Failed to load students for class', classNumericId, e);
+      console.error('Failed to load students for class', classDocId, e);
       return [];
     }
   };
@@ -478,6 +483,120 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   const loadAssignments = async () => {
     const data = await fetchCategory(`${COLLECTIONS.TRAINING_ASSIGNMENTS}?populate=decision`);
     if (data) setAssignments(data);
+  };
+
+  // --- Download Student Photos as ZIP (3x4 photos) ---
+  const handleDownloadStudentPhotos = async () => {
+    const studentsWithPhotos = tempStudents.filter(s => s.photo && s.photo.trim() !== '');
+
+    if (studentsWithPhotos.length === 0) {
+      alert('Không có học viên nào trong danh sách có ảnh 3x4.');
+      return;
+    }
+
+    setIsDownloadingPhotos(true);
+    const zip = new JSZip();
+    let successCount = 0;
+    let failCount = 0;
+
+    // Sanitize name for use as filename
+    const sanitizeName = (name: string): string =>
+      name.trim().replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_');
+
+    // Convert base64 data URL to Blob
+    const base64ToBlob = (dataUrl: string): Blob => {
+      const [header, data] = dataUrl.split(',');
+      const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
+      const byteChars = atob(data);
+      const byteArr = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+      return new Blob([byteArr], { type: mime });
+    };
+
+    // Get file extension from URL or mime type
+    const getExtension = (url: string): string => {
+      const fromUrl = url.split('?')[0].split('.').pop()?.toLowerCase();
+      if (fromUrl && ['jpg','jpeg','png','webp','gif'].includes(fromUrl)) return fromUrl;
+      return 'jpg';
+    };
+
+    for (let i = 0; i < studentsWithPhotos.length; i++) {
+      const student = studentsWithPhotos[i];
+      const photoSrc = student.photo!;
+      const safeName = sanitizeName(student.fullName) || `hocvien_${i + 1}`;
+
+      try {
+        let blob: Blob;
+        let ext = 'jpg';
+
+        if (photoSrc.startsWith('data:image/')) {
+          // Base64 embedded image
+          const mime = photoSrc.match(/data:(.*?);/)?.[1] || 'image/jpeg';
+          ext = mime.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
+          blob = base64ToBlob(photoSrc);
+        } else {
+          // URL-based image — resolve relative URLs to absolute
+          let absoluteUrl = photoSrc;
+          if (photoSrc.startsWith('/')) {
+            absoluteUrl = `${window.location.origin}${photoSrc}`;
+          }
+          ext = getExtension(photoSrc);
+
+          const token = localStorage.getItem('jwt_token');
+          const headers: Record<string, string> = {};
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+
+          const res = await fetch(absoluteUrl, { headers });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          blob = await res.blob();
+
+          // Detect ext from content-type if ambiguous
+          const ct = res.headers.get('content-type') || '';
+          if (ct.includes('jpeg') || ct.includes('jpg')) ext = 'jpg';
+          else if (ct.includes('png')) ext = 'png';
+          else if (ct.includes('webp')) ext = 'webp';
+        }
+
+        zip.file(`${String(i + 1).padStart(2, '0')}_${safeName}.${ext}`, blob);
+        successCount++;
+      } catch (err) {
+        console.warn(`Failed to fetch photo for ${student.fullName}:`, err);
+        failCount++;
+      }
+    }
+
+    if (successCount === 0) {
+      setIsDownloadingPhotos(false);
+      alert('Không thể tải được ảnh nào. Vui lòng kiểm tra lại kết nối.');
+      return;
+    }
+
+    try {
+      // Tên file zip theo Đợt/Khóa
+      const courseName = (formData.trainingCourse || formData.number || 'Quyet_Dinh')
+        .trim().replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_');
+      const zipFileName = `Anh3x4_${courseName}.zip`;
+
+      const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = zipFileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      const msg = failCount > 0
+        ? `✅ Đã tải ${successCount} ảnh vào file "${zipFileName}".\n⚠️ Không tải được ${failCount} ảnh (có thể chưa có ảnh trên server).`
+        : `✅ Đã tải thành công ${successCount} ảnh vào file "${zipFileName}".`;
+      alert(msg);
+    } catch (err) {
+      console.error('Failed to generate ZIP:', err);
+      alert('Có lỗi khi tạo file ZIP. Vui lòng thử lại.');
+    } finally {
+      setIsDownloadingPhotos(false);
+    }
   };
 
   const filteredDecisions = decisions
@@ -765,12 +884,24 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
 
       // Map student documentIds -> numeric strapiIds
       const studentNumericIds = tempStudents.map((s: any) => {
+        // If we already have the numeric strapiId, use it directly (Strapi v5 compatible)
+        if (s.strapiId && !isNaN(Number(s.strapiId))) {
+          return Number(s.strapiId);
+        }
+        
+        // Otherwise, try to find it in the allStudents list
         const stu = allStudents.find((st: any) =>
           String(st.id) === String(s.id) ||
           String(st.documentId) === String(s.id) ||
           String((st as any).strapiId) === String(s.id)
         );
-        return stu ? Number((stu as any).strapiId || stu.id) : null;
+        
+        if (stu) return Number((stu as any).strapiId || stu.id);
+        
+        // Fallback: if the id itself is numeric, it might be the strapiId
+        if (s.id && !isNaN(Number(s.id))) return Number(s.id);
+        
+        return null;
       }).filter(Boolean);
       console.log('DEBUG: tempStudents', tempStudents);
       console.log('DEBUG: mapped studentNumericIds', studentNumericIds);
@@ -1029,7 +1160,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     setTempStudents(d.students || []);
     setIsFormOpen(true);
 
-    if (d.type === 'OPENING' && d.classId) {
+    // Load students for the class (even for recognition, we might want to manually add more students)
+    if (d.classId) {
       setLoading(true);
       loadStudentsByClass(d.classId).then(classStudents => {
         const approvedStudents = classStudents.filter(s => (s as any).isApproved === true);
@@ -1040,7 +1172,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   };
 
   const handleOpenAddStudentModal = () => {
-    if (viewType === 'OPENING' && formData.classId) {
+    if (formData.classId) {
       setLoading(true);
       loadStudentsByClass(formData.classId).then(classStudents => {
         // filter out unapproved AND currently assigned students to OTHER opening decisions
@@ -2470,6 +2602,19 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
             ) : (
               <button onClick={handlePrintStudentCards} className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded text-[12px] font-bold hover:bg-indigo-700 transition-colors shadow-sm"><IdCard size={14} /> In thẻ</button>
             )}
+            {viewType === 'RECOGNITION' && (
+              <button
+                onClick={handleDownloadStudentPhotos}
+                disabled={isDownloadingPhotos}
+                title="Tải ảnh 3x4 của tất cả học viên về dưới dạng file ZIP"
+                className="flex items-center gap-1.5 px-4 py-1.5 bg-violet-600 text-white rounded text-[12px] font-bold hover:bg-violet-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isDownloadingPhotos
+                  ? <Loader2 size={14} className="animate-spin" />
+                  : <Download size={14} />}
+                Tải ảnh 3x4
+              </button>
+            )}
             <button onClick={handleSaveDecision} className="px-5 py-1.5 bg-[#54a0ff] text-white rounded border border-[#2e86de] text-[12px] font-bold shadow-sm hover:brightness-105 flex items-center gap-1.5">
               <Save size={14} /> Lưu
             </button>
@@ -2511,6 +2656,20 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
                   type="text"
                   value={formData.trainingCourse}
                   onChange={e => setFormData({ ...formData, trainingCourse: e.target.value })}
+                  onBlur={(e) => {
+                    const val = e.target.value.trim();
+                    if (!val) return;
+                    
+                    const isDuplicate = decisions.some(d => 
+                      d.type === viewType && 
+                      d.trainingCourse.trim().toLowerCase() === val.toLowerCase() &&
+                      String(d.id) !== String(editingId)
+                    );
+                    
+                    if (isDuplicate) {
+                      alert(`CẢNH BÁO: Đợt/Khóa "${val}" đã tồn tại trong hệ thống. Vui lòng kiểm tra lại để tránh trùng lặp.`);
+                    }
+                  }}
                   className="flex-1 border border-slate-300 rounded-sm px-2 py-1.5 text-[12px] outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                   placeholder="Đợt/Khóa"
                 />
@@ -2896,9 +3055,13 @@ có ảnh</span>
                       <span className="text-[10px] text-slate-400">{doc.date} • {doc.type.split('/')[1]?.toUpperCase() || 'FILE'}</span>
                     </div>
                   </div>
-                  <a href={doc.url} download={doc.name} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" title="Tải xuống">
+                  <button 
+                    onClick={() => downloadFile(doc.url, doc.name)} 
+                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" 
+                    title="Tải xuống"
+                  >
                     <Upload size={16} className="rotate-180" />
-                  </a>
+                  </button>
                 </div>
               ))}
             </div>
