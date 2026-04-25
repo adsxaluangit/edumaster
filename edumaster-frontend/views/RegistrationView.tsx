@@ -62,10 +62,14 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
         email: '',
         parentName: '',
         parentPhone: '',
-        classCode: '',
         company: '',
         notes: ''
     });
+
+    // Multi-class selection
+    const [selectedClasses, setSelectedClasses] = useState<any[]>([]);
+    // Per-class duplicate status: { [classId]: 'checking' | 'ok' | 'duplicate' }
+    const [classCheckStatus, setClassCheckStatus] = useState<Record<string, string>>({});
     // Pre-fill form if initialData is provided
     useEffect(() => {
         if (initialData) {
@@ -91,28 +95,43 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
     const [existingData, setExistingData] = useState<any>(null);
     const [isCheckingId, setIsCheckingId] = useState(false);
 
-    // --- Duplicate guard ---
-    const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
-    const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
-
-    const runDuplicateCheck = async (idNumber: string, classCode: string) => {
-        setDuplicateWarning(null);
-        if (!idNumber || idNumber.length < 9 || !classCode) return;
-        const selectedClass = availableClasses.find((c: any) => c.code === classCode);
-        const classDocId = selectedClass ? String(selectedClass.documentId || selectedClass.id || '') : '';
-        if (!classDocId) return;
-        setIsCheckingDuplicate(true);
+    // Per-class duplicate check
+    const checkClassDuplicate = async (idNumber: string, cls: any): Promise<boolean> => {
+        const clsId = String(cls.id || ''); // documentId after normalization
+        setClassCheckStatus(prev => ({ ...prev, [clsId]: 'checking' }));
         try {
-            const result = await checkDuplicateStudent(idNumber, classDocId);
-            if (result.exists) {
-                setDuplicateWarning(
-                    `Bạn (CCCD: ${idNumber}) đã đăng ký lớp này rồi (${result.count} lần). Vui lòng chọn lớp khác hoặc liên hệ nhà trường!`
-                );
-            }
-        } finally {
-            setIsCheckingDuplicate(false);
+            const result = await checkDuplicateStudent(idNumber, clsId);
+            setClassCheckStatus(prev => ({ ...prev, [clsId]: result.exists ? 'duplicate' : 'ok' }));
+            return result.exists;
+        } catch {
+            setClassCheckStatus(prev => ({ ...prev, [clsId]: 'ok' }));
+            return false;
         }
     };
+
+    // Toggle class selection + run duplicate check if CCCD is filled
+    const toggleClassSelection = async (cls: any) => {
+        const isSelected = selectedClasses.some(c => c.id === cls.id);
+        if (isSelected) {
+            setSelectedClasses(prev => prev.filter(c => c.id !== cls.id));
+            setClassCheckStatus(prev => { const n = { ...prev }; delete n[String(cls.id)]; return n; });
+        } else {
+            setSelectedClasses(prev => [...prev, cls]);
+            if (formData.idNumber.length === 12) {
+                await checkClassDuplicate(formData.idNumber, cls);
+            }
+        }
+    };
+
+    // Re-check all selected classes when CCCD changes
+    useEffect(() => {
+        if (formData.idNumber.length === 12 && selectedClasses.length > 0) {
+            setClassCheckStatus({});
+            selectedClasses.forEach(cls => checkClassDuplicate(formData.idNumber, cls));
+        } else if (formData.idNumber.length !== 12) {
+            setClassCheckStatus({});
+        }
+    }, [formData.idNumber]);
 
     // Load available classes from API
     useEffect(() => {
@@ -170,151 +189,119 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
 
 
 
+    const [submitResult, setSubmitResult] = useState<{ok: string[], skipped: string[]}>({ ok: [], skipped: [] });
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.fullName || !formData.phone || !formData.idNumber || !formData.pob) {
             alert('Vui lòng điền đầy đủ các trường bắt buộc (Họ tên, SĐT, CCCD, Nơi sinh)!');
             return;
         }
-
-        if (!formData.classCode) {
-            alert('Vui lòng chọn lớp học muốn đăng ký!');
+        if (selectedClasses.length === 0) {
+            alert('Vui lòng chọn ít nhất 1 lớp học muốn đăng ký!');
             return;
         }
-
         if (formData.idNumber.length !== 12) {
             alert('Vui lòng nhập chính xác 12 số CCCD/CMND!');
             return;
         }
-
-        // --- HARD BLOCK: Kiểm tra trùng lập tại DB ---
-        const selectedClassForCheck = availableClasses.find((c: any) => c.code === formData.classCode);
-        const classDocIdForCheck = selectedClassForCheck
-            ? String(selectedClassForCheck.documentId || selectedClassForCheck.id || '')
-            : '';
-        if (classDocIdForCheck) {
-            const dupResult = await checkDuplicateStudent(formData.idNumber, classDocIdForCheck);
-            if (dupResult.exists) {
-                setDuplicateWarning(
-                    `Bạn (CCCD: ${formData.idNumber}) đã đăng ký lớp này rồi (${dupResult.count} lần). Vui lòng chọn lớp khác hoặc liên hệ nhà trường!`
-                );
-                alert(`KHÔNG THỂ ĐĂNG KÝ\n\nBạn có CCCD ${formData.idNumber} đã đăng ký lớp này rồi (${dupResult.count} lần).\n\nVui lòng chọn lớp khác hoặc liên hệ nhà trường để được hỗ trợ.`);
-                return;
-            }
+        // Block if any selected class is already duplicate
+        const hasDuplicate = selectedClasses.some(cls => classCheckStatus[String(cls.id)] === 'duplicate');
+        if (hasDuplicate) {
+            alert('Một số lớp bạn chọn đã bị đăng ký rồi. Vui lòng bỏ chọn các lớp được đánh dấu đỏ trước khi gửi.');
+            return;
         }
-        // --------------------------------------------------
 
         const nameParts = formData.fullName.trim().split(' ');
         const firstName = nameParts.length > 1 ? nameParts.pop() || '' : formData.fullName;
         const lastName = nameParts.length > 0 ? nameParts.join(' ') : '';
 
-        // Find selected class
-        const selectedClass = availableClasses.find(c => c.code === formData.classCode);
-
-        let finalPhotoUrl = studentPhoto;
-        // Re-use existing photo if no new one provided
-        if (!finalPhotoUrl && existingData && existingData.photo) {
-            finalPhotoUrl = existingData.photo;
-        }
-
+        // --- Upload images ONCE before the loop ---
+        let finalPhotoUrl: string | null = studentPhoto;
+        if (!finalPhotoUrl && existingData?.photo) finalPhotoUrl = existingData.photo;
         if (finalPhotoUrl && finalPhotoUrl.startsWith('data:image/')) {
-           const uploadedInfo = await uploadFile(finalPhotoUrl, `avatar_${formData.idNumber}_${Date.now()}.jpg`);
-           if (uploadedInfo && uploadedInfo.length > 0) {
-               finalPhotoUrl = uploadedInfo[0].url;
-               setStudentPhoto(finalPhotoUrl); // Update state to prevent re-upload
-           }
+            const up = await uploadFile(finalPhotoUrl, `avatar_${formData.idNumber}_${Date.now()}.jpg`);
+            if (up && up.length > 0) { finalPhotoUrl = up[0].url; setStudentPhoto(finalPhotoUrl); }
         }
 
-        let finalCccdFront = cccdFront;
+        let finalCccdFront: string | null = cccdFront;
         const existingCccdFront = existingData?.documents?.find((d: any) => d.name === 'CCCD Mặt trước')?.url;
-        if (!finalCccdFront && existingCccdFront) {
-            finalCccdFront = existingCccdFront;
-        }
-
+        if (!finalCccdFront && existingCccdFront) finalCccdFront = existingCccdFront;
         if (finalCccdFront && finalCccdFront.startsWith('data:image/')) {
-           const uploadedInfo = await uploadFile(finalCccdFront, `cccd_front_${formData.idNumber}_${Date.now()}.jpg`);
-           if (uploadedInfo && uploadedInfo.length > 0) {
-               finalCccdFront = uploadedInfo[0].url;
-               setCccdFront(finalCccdFront); // Update state to prevent re-upload
-           }
+            const up = await uploadFile(finalCccdFront, `cccd_front_${formData.idNumber}_${Date.now()}.jpg`);
+            if (up && up.length > 0) { finalCccdFront = up[0].url; setCccdFront(finalCccdFront); }
         }
 
-        let finalCccdBack = cccdBack;
+        let finalCccdBack: string | null = cccdBack;
         const existingCccdBack = existingData?.documents?.find((d: any) => d.name === 'CCCD Mặt sau')?.url;
-        if (!finalCccdBack && existingCccdBack) {
-            finalCccdBack = existingCccdBack;
-        }
-
+        if (!finalCccdBack && existingCccdBack) finalCccdBack = existingCccdBack;
         if (finalCccdBack && finalCccdBack.startsWith('data:image/')) {
-           const uploadedInfo = await uploadFile(finalCccdBack, `cccd_back_${formData.idNumber}_${Date.now()}.jpg`);
-           if (uploadedInfo && uploadedInfo.length > 0) {
-               finalCccdBack = uploadedInfo[0].url;
-               setCccdBack(finalCccdBack); // Update state to prevent re-upload
-           }
+            const up = await uploadFile(finalCccdBack, `cccd_back_${formData.idNumber}_${Date.now()}.jpg`);
+            if (up && up.length > 0) { finalCccdBack = up[0].url; setCccdBack(finalCccdBack); }
         }
+        // -----------------------------------------------
 
-        const newStudentData = {
-            stt: 0, // Backend or logic should handle this, setting 0 for now as 'pending'
-            class_code: selectedClass ? selectedClass.code : 'PENDING',
-            class_name: selectedClass ? selectedClass.name : 'Lớp chờ xếp lớp',
-
-            // Relation: school_class
-            school_class: selectedClass ? (selectedClass.strapiId || selectedClass.id) : null,
-
-            student_code: formData.idNumber, // Use CCCD as Student Code
-            id_number: formData.idNumber,
-            card_number: '', // Can be filled later
-
-            first_name: firstName.toUpperCase(),
-            last_name: lastName.toUpperCase(),
-            full_name: formData.fullName.toUpperCase(),
-
-            gender: formData.gender,
-            dob: parseToISO(formData.dob),
-            pob: formData.pob,
-            ethnicity: formData.ethnicity,
-            nationality: 'Việt Nam',
-            phone: formData.phone,
-            address: formData.address,
-            company: formData.company,
-
-            photo: finalPhotoUrl,
-            notes: formData.notes,
-            is_approved: false
-        };
+        const okList: string[] = [];
+        const skippedList: string[] = [];
 
         try {
-            const createdStudent = await createCategory(COLLECTIONS.STUDENTS, newStudentData);
+            for (const cls of selectedClasses) {
+                // Final duplicate check per class
+                const dupResult = await checkDuplicateStudent(formData.idNumber, String(cls.id));
+                if (dupResult.exists) {
+                    skippedList.push(cls.name);
+                    continue;
+                }
 
-            // Tải ảnh CCCD mặt trước/sau vào Hồ sơ HV (STUDENT_DOCUMENTS) nếu có
-            if (createdStudent && (createdStudent.strapiId || createdStudent.id)) {
-                const studentIdStr = createdStudent.strapiId || createdStudent.id;
-                
-                if (finalCccdFront) {
-                    await createCategory(COLLECTIONS.STUDENT_DOCUMENTS, {
-                        name: 'CCCD Mặt trước',
-                        type: 'image/jpeg',
-                        date: new Date().toISOString(),
-                        url: finalCccdFront,
-                        student: studentIdStr
-                    });
+                const newStudentData = {
+                    stt: 0,
+                    class_code: cls.code || '',
+                    class_name: cls.name || '',
+                    school_class: cls.strapiId || cls.id,
+                    student_code: formData.idNumber,
+                    id_number: formData.idNumber,
+                    card_number: '',
+                    first_name: firstName.toUpperCase(),
+                    last_name: lastName.toUpperCase(),
+                    full_name: formData.fullName.toUpperCase(),
+                    gender: formData.gender,
+                    dob: parseToISO(formData.dob),
+                    pob: formData.pob,
+                    ethnicity: formData.ethnicity,
+                    nationality: 'Việt Nam',
+                    phone: formData.phone,
+                    address: formData.address,
+                    company: formData.company,
+                    photo: finalPhotoUrl,
+                    notes: formData.notes,
+                    is_approved: false
+                };
+
+                const createdStudent = await createCategory(COLLECTIONS.STUDENTS, newStudentData);
+
+                if (createdStudent && (createdStudent.strapiId || createdStudent.id)) {
+                    const studentIdStr = createdStudent.strapiId || createdStudent.id;
+                    if (finalCccdFront) {
+                        await createCategory(COLLECTIONS.STUDENT_DOCUMENTS, {
+                            name: 'CCCD Mặt trước', type: 'image/jpeg',
+                            date: new Date().toISOString(), url: finalCccdFront, student: studentIdStr
+                        });
+                    }
+                    if (finalCccdBack) {
+                        await createCategory(COLLECTIONS.STUDENT_DOCUMENTS, {
+                            name: 'CCCD Mặt sau', type: 'image/jpeg',
+                            date: new Date().toISOString(), url: finalCccdBack, student: studentIdStr
+                        });
+                    }
                 }
-                
-                if (finalCccdBack) {
-                    await createCategory(COLLECTIONS.STUDENT_DOCUMENTS, {
-                        name: 'CCCD Mặt sau',
-                        type: 'image/jpeg',
-                        date: new Date().toISOString(),
-                        url: finalCccdBack,
-                        student: studentIdStr
-                    });
-                }
+                okList.push(cls.name);
             }
 
+            setSubmitResult({ ok: okList, skipped: skippedList });
             setIsSuccess(true);
         } catch (error) {
-            console.error("Failed to register student", error);
-            alert("Đã có lỗi xảy ra khi gửi đăng ký. Vui lòng thử lại sau.");
+            console.error('Failed to register student', error);
+            alert('Đã có lỗi xảy ra khi gửi đăng ký. Vui lòng thử lại sau.');
         }
     };
 
@@ -326,23 +313,37 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                         <CheckCircle size={40} />
                     </div>
                     <h2 className="text-2xl font-bold text-slate-800 mb-2">Đăng ký thành công!</h2>
-                    <p className="text-slate-600 mb-8">
-                        Hồ sơ của bạn đã được gửi thành công. Nhà trường sẽ liên hệ với bạn trong thời gian sớm nhất.
-                    </p>
+                    {submitResult.ok.length > 0 && (
+                        <div className="mt-3 mb-2 text-left bg-green-50 rounded-lg p-3 border border-green-200">
+                            <p className="text-sm font-bold text-green-700 mb-1">✅ Đã đăng ký ({submitResult.ok.length} lớp):</p>
+                            {submitResult.ok.map((name, i) => (
+                                <p key={i} className="text-sm text-green-600 pl-2">• {name}</p>
+                            ))}
+                        </div>
+                    )}
+                    {submitResult.skipped.length > 0 && (
+                        <div className="mt-2 mb-3 text-left bg-orange-50 rounded-lg p-3 border border-orange-200">
+                            <p className="text-sm font-bold text-orange-700 mb-1">⚠️ Bỏ qua ({submitResult.skipped.length} lớp đã đăng ký):</p>
+                            {submitResult.skipped.map((name, i) => (
+                                <p key={i} className="text-sm text-orange-600 pl-2">• {name}</p>
+                            ))}
+                        </div>
+                    )}
+                    <p className="text-slate-500 text-sm mt-3 mb-6">Nhà trường sẽ liên hệ với bạn trong thời gian sớm nhất.</p>
                     <div className="flex gap-3 justify-center">
                         <button
                             onClick={() => {
                                 setIsSuccess(false);
-                                setFormData({ ...formData, classCode: '' });
+                                setSelectedClasses([]);
+                                setClassCheckStatus({});
+                                setSubmitResult({ ok: [], skipped: [] });
                             }}
                             className="px-6 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700 transition-colors shadow-sm"
                         >
                             Đăng ký lớp mới
                         </button>
                         <button
-                            onClick={() => {
-                                window.location.href = 'https://mic1.edu.vn';
-                            }}
+                            onClick={() => { window.location.href = 'https://mic1.edu.vn'; }}
                             className="px-6 py-2 bg-slate-100 text-slate-700 font-bold rounded hover:bg-slate-200 transition-colors"
                         >
                             Thoát
@@ -609,42 +610,63 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">
                                         Đăng ký lớp học <span className="text-red-500">*</span>
+                                        {selectedClasses.length > 0 && (
+                                            <span className="ml-2 bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                                                Đã chọn: {selectedClasses.length} lớp
+                                            </span>
+                                        )}
                                     </label>
-                                    <select
-                                        value={formData.classCode}
-                                        onChange={e => {
-                                            const newCode = e.target.value;
-                                            setFormData({ ...formData, classCode: newCode });
-                                            setDuplicateWarning(null);
-                                            if (formData.idNumber.length === 12 && newCode) {
-                                                runDuplicateCheck(formData.idNumber, newCode);
-                                            }
-                                        }}
-                                        required
-                                        className={`w-full px-4 py-2 border rounded focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none ${
-                                            duplicateWarning ? 'border-red-400 bg-red-50'
-                                            : !formData.classCode ? 'border-red-400 bg-red-50'
-                                            : 'border-slate-300'
-                                        }`}
-                                    >
-                                        <option value="">-- Chọn lớp muốn học --</option>
-                                        {availableClasses.map((cls: any) => (
-                                            <option key={cls.id} value={cls.code}>{cls.name}</option>
-                                        ))}
-                                    </select>
-                                    {isCheckingDuplicate && (
-                                        <p className="text-xs text-blue-500 mt-1 animate-pulse">Đang kiểm tra trùng lớp...</p>
-                                    )}
-                                    {duplicateWarning && !isCheckingDuplicate && (
-                                        <div className="mt-2 p-3 bg-red-50 border border-red-300 rounded-lg flex items-start gap-2">
-                                            <span className="text-red-500 text-base shrink-0">🚫</span>
-                                            <p className="text-red-700 font-bold text-xs">{duplicateWarning}</p>
-                                        </div>
-                                    )}
-                                    {!formData.classCode && !duplicateWarning && (
-                                        <p className="text-red-500 text-xs mt-1">※ Bắt buộc phải chọn lớp học</p>
+                                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                                        {availableClasses.map((cls: any) => {
+                                            const clsId = String(cls.id || '');
+                                            const isSelected = selectedClasses.some(c => c.id === cls.id);
+                                            const status = classCheckStatus[clsId];
+                                            const isDuplicate = status === 'duplicate';
+                                            const isChecking = status === 'checking';
+                                            return (
+                                                <div
+                                                    key={clsId}
+                                                    onClick={() => !isDuplicate && toggleClassSelection(cls)}
+                                                    className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all select-none ${
+                                                        isDuplicate
+                                                            ? 'border-red-200 bg-red-50 cursor-not-allowed opacity-70'
+                                                            : isSelected
+                                                            ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                                            : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/30'
+                                                    }`}
+                                                >
+                                                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
+                                                        isDuplicate ? 'border-red-300 bg-red-100'
+                                                        : isSelected ? 'border-blue-500 bg-blue-500'
+                                                        : 'border-slate-300 bg-white'
+                                                    }`}>
+                                                        {isSelected && !isDuplicate && (
+                                                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                        )}
+                                                        {isDuplicate && <span className="text-red-500 text-xs font-bold">!</span>}
+                                                    </div>
+                                                    <span className={`flex-1 text-sm font-medium ${
+                                                        isDuplicate ? 'text-red-600' : isSelected ? 'text-blue-800 font-bold' : 'text-slate-700'
+                                                    }`}>{cls.name}</span>
+                                                    {isChecking && (
+                                                        <span className="text-[10px] text-blue-400 animate-pulse shrink-0">Đang kiểm tra...</span>
+                                                    )}
+                                                    {isDuplicate && (
+                                                        <span className="text-[10px] bg-red-100 text-red-600 font-bold px-1.5 py-0.5 rounded shrink-0">Đã ĐK</span>
+                                                    )}
+                                                    {isSelected && !isDuplicate && status === 'ok' && (
+                                                        <span className="text-[10px] bg-green-100 text-green-600 font-bold px-1.5 py-0.5 rounded shrink-0">✓ Hợp lệ</span>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    {selectedClasses.length === 0 && (
+                                        <p className="text-red-500 text-xs mt-2">※ Bắt buộc phải chọn ít nhất 1 lớp học</p>
                                     )}
                                 </div>
 
@@ -718,14 +740,14 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                         <div className="mt-8 pt-6 border-t border-slate-100 flex justify-end">
                             <button
                                 type="submit"
-                                disabled={!!duplicateWarning}
+                                disabled={selectedClasses.length === 0 || selectedClasses.some(c => classCheckStatus[String(c.id)] === 'duplicate')}
                                 className={`px-8 py-3 font-bold rounded-lg shadow-lg text-sm flex items-center gap-2 transition-all ${
-                                    duplicateWarning
+                                    selectedClasses.length === 0 || selectedClasses.some(c => classCheckStatus[String(c.id)] === 'duplicate')
                                         ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
                                         : 'bg-blue-600 text-white shadow-blue-500/30 hover:bg-blue-700 hover:-translate-y-0.5'
                                 }`}
                             >
-                                <Save size={18} /> GỬi ĐĂNG KÝ
+                                <Save size={18} /> GỬI ĐĂNG KÝ ({selectedClasses.length} lớp)
                             </button>
                         </div>
                     </form>
