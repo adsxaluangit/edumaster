@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, List, Search, Trash2, Edit, UserPlus, Save, FileText, Calendar, Users, FileDown, GraduationCap, School, Paperclip, Upload, Printer, IdCard, FileSpreadsheet, History, Clock, ShieldCheck, ScrollText, Camera, Image as ImageIcon } from 'lucide-react';
+import { Plus, X, List, Search, Trash2, Edit, UserPlus, Save, FileText, Calendar, Users, FileDown, GraduationCap, School, Paperclip, Upload, Printer, IdCard, FileSpreadsheet, History, Clock, ShieldCheck, ScrollText, Camera, Image as ImageIcon, Download, Loader2 } from 'lucide-react';
+import JSZip from 'jszip';
 import { Student } from '../types';
-import { fetchCategory, createCategory, updateCategory, deleteCategory, COLLECTIONS, createLog } from '../services/api';
+import { fetchCategory, fetchCategoryAll, createCategory, updateCategory, deleteCategory, COLLECTIONS, createLog, uploadFile } from '../services/api';
 import ExcelJS from 'exceljs';
 import { formatDate, parseToISO } from '../utils/dateUtils';
+import { downloadFile } from '../utils/fileUtils';
 
 interface DecisionDetail {
   id: string;
@@ -90,6 +92,9 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   const editVideoRef = useRef<HTMLVideoElement>(null);
   const editCanvasRef = useRef<HTMLCanvasElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Photo download state
+  const [isDownloadingPhotos, setIsDownloadingPhotos] = useState(false);
 
   // Audit Log State
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
@@ -346,7 +351,9 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       await Promise.all([
         loadDecisions(),
         loadClasses(),
-        loadStudents(),
+        // NOTE: loadStudents() removed — we no longer pre-load ALL students at startup.
+        // At 500k records this would: send 500k rows over network, freeze browser rendering.
+        // Students are now loaded lazily per-class in handleTypeLinkSelect().
         loadExamGrades(),
         loadTemplates(),
         loadAssignments()
@@ -360,9 +367,9 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   };
 
   const loadDecisions = async () => {
-    // We need deep populate to get students' documents within the decision
+    // We need deep populate to get students' documents and photo within the decision
     // Note: Using explicit relation population (true) instead of * to avoid validation errors with deep nested relations
-    const data = await fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?sort[0]=signed_date:desc&sort[1]=id:desc&populate[students][populate][0]=documents&populate[school_class]=true&populate[related_decision]=true`);
+    const data = await fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?sort[0]=signed_date:desc&sort[1]=id:desc&populate[school_class]=true&populate[related_decision]=true&populate[students][populate][documents][fields][0]=name&populate[students][populate][documents][fields][1]=url&populate[students][populate][documents][fields][2]=type&populate[students][fields][0]=full_name&populate[students][fields][1]=dob&populate[students][fields][2]=gender&populate[students][fields][3]=card_number&populate[students][fields][4]=id_number&populate[students][fields][5]=student_code&populate[students][fields][6]=pob&populate[students][fields][7]=photo`);
     if (data) {
       const mapped = data.map((d: any, index: number) => {
         const classData = d.school_class?.data || d.school_class;
@@ -424,39 +431,42 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     if (data) setAvailableClasses(data);
   };
 
-  const loadStudents = async () => {
-    const data = await fetchCategory(COLLECTIONS.STUDENTS);
-    if (data) {
-      setAllStudents(data.map((d: any) => {
+  // Load students for a SPECIFIC class only (lazy loading for scalability)
+  // Called only when user selects a class in OPENING form
+  // This scales to 500k+ students because we only fetch students for one class at a time
+  const loadStudentsByClass = async (classDocId: string): Promise<Student[]> => {
+    try {
+      const params = `filters[school_class][documentId][$eq]=${classDocId}&filters[is_approved][$eq]=true&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=is_approved&fields[9]=company&fields[10]=phone&populate[school_class]=true&pagination[pageSize]=500`;
+      const data = await fetchCategory(`${COLLECTIONS.STUDENTS}?${params}`);
+      if (!data) return [];
+      return data.map((d: any) => {
         const classData = d.school_class?.data || d.school_class;
         return {
           id: String(d.documentId || d.id),
           strapiId: d.strapiId || d.id,
-          stt: d.stt || 0,
-          studentCode: d.student_code || d.studentCode || '',
-          fullName: d.full_name || d.fullName || '',
+          stt: 0,
+          studentCode: d.student_code || '',
+          fullName: d.full_name || '',
           firstName: d.first_name || '',
           lastName: d.last_name || '',
           dob: d.dob || '',
           pob: d.pob || '',
-          address: d.address || '',
+          address: '',
           gender: d.gender || '',
           idNumber: d.id_number || '',
-          cardNumber: d.card_number || '',
-          group: classData?.attributes?.name || classData?.name || d.group || '',
-          className: classData?.attributes?.name || classData?.name || d.class_name || '',
-          classCode: classData?.attributes?.code || classData?.code || d.class_code || '',
+          cardNumber: '',
+          group: classData?.attributes?.name || classData?.name || '',
+          className: classData?.attributes?.name || classData?.name || '',
+          classCode: classData?.attributes?.code || classData?.code || '',
           classId: String(classData?.documentId || classData?.id || ''),
-          isApproved: !!d.is_approved,
-          documents: (Array.isArray(d.documents) ? d.documents : d.documents?.data || []).map((doc: any) => ({
-            id: doc.documentId || doc.id,
-            name: doc.attributes?.name || doc.name,
-            url: doc.attributes?.url || doc.url,
-            type: doc.attributes?.mime || doc.type || 'application/pdf'
-          })),
-          photo: d.photo || null
+          isApproved: d.is_approved === true || String(d.is_approved).toLowerCase() === 'true',
+          documents: [],
+          photo: null
         } as Student;
-      }));
+      });
+    } catch (e) {
+      console.error('Failed to load students for class', classDocId, e);
+      return [];
     }
   };
 
@@ -473,6 +483,120 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   const loadAssignments = async () => {
     const data = await fetchCategory(`${COLLECTIONS.TRAINING_ASSIGNMENTS}?populate=decision`);
     if (data) setAssignments(data);
+  };
+
+  // --- Download Student Photos as ZIP (3x4 photos) ---
+  const handleDownloadStudentPhotos = async () => {
+    const studentsWithPhotos = tempStudents.filter(s => s.photo && s.photo.trim() !== '');
+
+    if (studentsWithPhotos.length === 0) {
+      alert('Không có học viên nào trong danh sách có ảnh 3x4.');
+      return;
+    }
+
+    setIsDownloadingPhotos(true);
+    const zip = new JSZip();
+    let successCount = 0;
+    let failCount = 0;
+
+    // Sanitize name for use as filename
+    const sanitizeName = (name: string): string =>
+      name.trim().replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_');
+
+    // Convert base64 data URL to Blob
+    const base64ToBlob = (dataUrl: string): Blob => {
+      const [header, data] = dataUrl.split(',');
+      const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
+      const byteChars = atob(data);
+      const byteArr = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+      return new Blob([byteArr], { type: mime });
+    };
+
+    // Get file extension from URL or mime type
+    const getExtension = (url: string): string => {
+      const fromUrl = url.split('?')[0].split('.').pop()?.toLowerCase();
+      if (fromUrl && ['jpg','jpeg','png','webp','gif'].includes(fromUrl)) return fromUrl;
+      return 'jpg';
+    };
+
+    for (let i = 0; i < studentsWithPhotos.length; i++) {
+      const student = studentsWithPhotos[i];
+      const photoSrc = student.photo!;
+      const safeName = sanitizeName(student.fullName) || `hocvien_${i + 1}`;
+
+      try {
+        let blob: Blob;
+        let ext = 'jpg';
+
+        if (photoSrc.startsWith('data:image/')) {
+          // Base64 embedded image
+          const mime = photoSrc.match(/data:(.*?);/)?.[1] || 'image/jpeg';
+          ext = mime.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
+          blob = base64ToBlob(photoSrc);
+        } else {
+          // URL-based image — resolve relative URLs to absolute
+          let absoluteUrl = photoSrc;
+          if (photoSrc.startsWith('/')) {
+            absoluteUrl = `${window.location.origin}${photoSrc}`;
+          }
+          ext = getExtension(photoSrc);
+
+          const token = localStorage.getItem('jwt_token');
+          const headers: Record<string, string> = {};
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+
+          const res = await fetch(absoluteUrl, { headers });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          blob = await res.blob();
+
+          // Detect ext from content-type if ambiguous
+          const ct = res.headers.get('content-type') || '';
+          if (ct.includes('jpeg') || ct.includes('jpg')) ext = 'jpg';
+          else if (ct.includes('png')) ext = 'png';
+          else if (ct.includes('webp')) ext = 'webp';
+        }
+
+        zip.file(`${String(i + 1).padStart(2, '0')}_${safeName}.${ext}`, blob);
+        successCount++;
+      } catch (err) {
+        console.warn(`Failed to fetch photo for ${student.fullName}:`, err);
+        failCount++;
+      }
+    }
+
+    if (successCount === 0) {
+      setIsDownloadingPhotos(false);
+      alert('Không thể tải được ảnh nào. Vui lòng kiểm tra lại kết nối.');
+      return;
+    }
+
+    try {
+      // Tên file zip theo Đợt/Khóa
+      const courseName = (formData.trainingCourse || formData.number || 'Quyet_Dinh')
+        .trim().replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_');
+      const zipFileName = `Anh3x4_${courseName}.zip`;
+
+      const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = zipFileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      const msg = failCount > 0
+        ? `✅ Đã tải ${successCount} ảnh vào file "${zipFileName}".\n⚠️ Không tải được ${failCount} ảnh (có thể chưa có ảnh trên server).`
+        : `✅ Đã tải thành công ${successCount} ảnh vào file "${zipFileName}".`;
+      alert(msg);
+    } catch (err) {
+      console.error('Failed to generate ZIP:', err);
+      alert('Có lỗi khi tạo file ZIP. Vui lòng thử lại.');
+    } finally {
+      setIsDownloadingPhotos(false);
+    }
   };
 
   const filteredDecisions = decisions
@@ -590,48 +714,48 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     }
 
     if (viewType === 'OPENING') {
-      const selectedClass = availableClasses.find(c => String(c.documentId || c.id) === selectedId);
+      // value from dropdown is c.id (numeric), find class by that
+      const selectedClass = availableClasses.find(c => String(c.id) === selectedId || String(c.strapiId) === selectedId);
       if (selectedClass) {
+        const numericClassId = String(selectedClass.id || selectedClass.strapiId || '');
         setFormData({
           ...formData,
           className: selectedClass.name || selectedClass.attributes?.name || '',
           classCode: selectedClass.code || selectedClass.attributes?.code || '',
-          classId: String(selectedClass.strapiId || selectedClass.id)
+          classId: numericClassId
         });
 
-        // Auto-populate students from this class, EXCLUDING already assigned students
-        // and ONLY including students who are approved (Đã duyệt)
-        // selectedId = c.id from dropdown (documentId in Strapi v5)
-        // s.classId = String(classData?.documentId || classData?.id)
-        // Also compare against selectedClass numeric id/strapiId for safety
-        const selectedNumericId = String(selectedClass.strapiId || '');
-        console.log('[DEBUG] handleTypeLinkSelect selectedId:', selectedId, 'selectedNumericId:', selectedNumericId);
-        console.log('[DEBUG] allStudents classIds sample:', allStudents.slice(0, 5).map(s => ({ name: s.fullName, classId: (s as any).classId, isApproved: (s as any).isApproved })));
-
-        const classStudents = allStudents.filter(s => {
-          const sClassId = String((s as any).classId || '');
-          const matchesClass = sClassId === selectedId || (selectedNumericId && sClassId === selectedNumericId);
-          const notAssigned = !assignedStudentIds.has(s.id);
-          const approved = (s as any).isApproved === true;
-          return matchesClass && notAssigned && approved;
+        // LAZY LOAD: fetch only students for this specific class from the API
+        // This avoids loading 500k+ students into browser memory
+        setLoading(true);
+        loadStudentsByClass(numericClassId).then(classStudents => {
+          // Only include students who are approved AND not already assigned to another opening decision
+          const approvedStudents = classStudents.filter(s => {
+            const isApproved = (s as any).isApproved === true;
+            const isAlreadyAssigned = assignedStudentIds.has(String(s.id)) || assignedStudentIds.has(String((s as any).strapiId));
+            return isApproved && !isAlreadyAssigned;
+          });
+          
+          const mappedStudents: DecisionDetail[] = approvedStudents.map((s, idx) => ({
+            id: s.id,
+            stt: idx + 1,
+            fullName: s.fullName,
+            dob: s.dob || '',
+            cardNumber: s.cardNumber || s.idNumber || '',
+            studentCode: s.studentCode,
+            years: '',
+            hometown: s.pob || '',
+            address: (s as any).address || '',
+            notes: '',
+            gender: s.gender || '',
+            documents: s.documents || [],
+            photo: s.photo,
+          }));
+          // Update allStudents so the picker table can show them
+          setAllStudents(approvedStudents);
+          setTempStudents(mappedStudents);
+          setLoading(false);
         });
-        console.log('[DEBUG] classStudents found:', classStudents.length, 'approved students for class', selectedId);
-        const mappedStudents: DecisionDetail[] = classStudents.map((s, idx) => ({
-          id: s.id,
-          stt: idx + 1,
-          fullName: s.fullName,
-          dob: s.dob || '',
-          cardNumber: s.cardNumber || s.idNumber || '',
-          studentCode: s.studentCode,
-          years: '',
-          hometown: s.pob || '',
-          address: (s as any).address || '',
-          notes: '',
-          gender: s.gender || '',
-          documents: s.documents || [],
-          photo: s.photo,
-        }));
-        setTempStudents(mappedStudents);
       }
     } else {
       const openingDecision = decisions.find(d => String(d.id) === selectedId);
@@ -760,12 +884,24 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
 
       // Map student documentIds -> numeric strapiIds
       const studentNumericIds = tempStudents.map((s: any) => {
+        // If we already have the numeric strapiId, use it directly (Strapi v5 compatible)
+        if (s.strapiId && !isNaN(Number(s.strapiId))) {
+          return Number(s.strapiId);
+        }
+        
+        // Otherwise, try to find it in the allStudents list
         const stu = allStudents.find((st: any) =>
           String(st.id) === String(s.id) ||
           String(st.documentId) === String(s.id) ||
           String((st as any).strapiId) === String(s.id)
         );
-        return stu ? Number((stu as any).strapiId || stu.id) : null;
+        
+        if (stu) return Number((stu as any).strapiId || stu.id);
+        
+        // Fallback: if the id itself is numeric, it might be the strapiId
+        if (s.id && !isNaN(Number(s.id))) return Number(s.id);
+        
+        return null;
       }).filter(Boolean);
       console.log('DEBUG: tempStudents', tempStudents);
       console.log('DEBUG: mapped studentNumericIds', studentNumericIds);
@@ -907,6 +1043,15 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     if (window.confirm("Bạn có muốn cập nhật thông tin (bao gồm ảnh) vào Hồ sơ gốc (Quản lý học viên) không?")) {
       try {
         const studentId = editingStudentData.id;
+        
+        let finalPhotoUrl = editingStudentData.photo;
+        if (finalPhotoUrl && finalPhotoUrl.startsWith('data:image/')) {
+           const uploadedInfo = await uploadFile(finalPhotoUrl, `avatar_edit_${editingStudentData.studentCode || Date.now()}.jpg`);
+           if (uploadedInfo && uploadedInfo.length > 0) {
+              finalPhotoUrl = uploadedInfo[0].url;
+           }
+        }
+
         if (studentId) {
           await updateCategory('students', studentId, {
             full_name: editingStudentData.fullName.toUpperCase(),
@@ -914,7 +1059,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
             card_number: editingStudentData.cardNumber,
             id_number: editingStudentData.cardNumber,
             pob: editingStudentData.hometown,
-            photo: editingStudentData.photo || null
+            photo: finalPhotoUrl || null
           });
           
           // Local sync
@@ -925,8 +1070,12 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
             cardNumber: editingStudentData.cardNumber,
             idNumber: editingStudentData.cardNumber,
             pob: editingStudentData.hometown,
-            photo: editingStudentData.photo || null
+            photo: finalPhotoUrl || null
           } : s));
+          
+          // Also update the temp list with the uploaded URL so we don't hold base64 in RAM
+          newList[editingStudentIndex].photo = finalPhotoUrl || null;
+          setTempStudents([...newList]);
           
           console.log('Updated source student record successfully.');
         }
@@ -992,6 +1141,55 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       } catch (e) {
         alert("Mở khóa thất bại.");
       }
+    }
+  };
+
+  const handleOpenEditDecision = (d: DecisionRecord, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    
+    if (checkIfLocked(d.id) && !e) {
+      alert("Quyết định này đã bị khóa (Đã có QĐ Công nhận). Bạn chỉ có thể xem, không thể sửa.");
+    }
+    
+    setEditingId(d.id);
+    setFormData({
+      number: d.number, signedDate: d.signedDate, signer: d.signer,
+      location: d.location, company: d.company, classType: d.classType,
+      classCode: d.classCode, className: d.className, trainingCourse: d.trainingCourse, notes: d.notes, classId: d.classId || '', relatedOpeningId: d.relatedOpeningId || '', startIndex: '1'
+    });
+    setTempStudents(d.students || []);
+    setIsFormOpen(true);
+
+    // Load students for the class (even for recognition, we might want to manually add more students)
+    if (d.classId) {
+      setLoading(true);
+      loadStudentsByClass(d.classId).then(classStudents => {
+        const approvedStudents = classStudents.filter(s => (s as any).isApproved === true);
+        setAllStudents(approvedStudents);
+        setLoading(false);
+      });
+    }
+  };
+
+  const handleOpenAddStudentModal = () => {
+    if (formData.classId) {
+      setLoading(true);
+      loadStudentsByClass(formData.classId).then(classStudents => {
+        // filter out unapproved AND currently assigned students to OTHER opening decisions
+        const approvedStudents = classStudents.filter(s => {
+          const isApproved = (s as any).isApproved === true;
+          // Note: When editing, assignedStudentIds currently includes the current decision's students too.
+          // BUT the add modal shouldn't show students that are already in tempStudents anyway.
+          const isAlreadyAssigned = assignedStudentIds.has(String(s.id)) || assignedStudentIds.has(String((s as any).strapiId));
+          const isAlreadyInThisDecision = tempStudents.some(ts => String(ts.id) === String(s.id) || String(ts.id) === String((s as any).strapiId));
+          return isApproved && (!isAlreadyAssigned || isAlreadyInThisDecision);
+        });
+        setAllStudents(approvedStudents);
+        setLoading(false);
+        setIsAddStudentModalOpen(true);
+      });
+    } else {
+      setIsAddStudentModalOpen(true);
     }
   };
 
@@ -1712,6 +1910,21 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Danh sách học viên');
 
+      const exportSortedStudents = [...tempStudents].filter(s => s.fullName && s.fullName.trim() !== '').sort((a, b) => {
+        const getParts = (name: string) => {
+          const parts = (name || '').trim().split(/\s+/);
+          const first = parts.length > 1 ? (parts.pop() || '') : (parts[0] || '');
+          const last = parts.join(' ');
+          return { first: first.toLowerCase(), last: last.toLowerCase() };
+        };
+        const nameA = getParts(a.fullName);
+        const nameB = getParts(b.fullName);
+        return (
+          nameA.first.localeCompare(nameB.first, 'vi', { sensitivity: 'base' }) ||
+          nameA.last.localeCompare(nameB.last, 'vi', { sensitivity: 'base' })
+        );
+      });
+
       if (viewType === 'RECOGNITION') {
         worksheet.mergeCells('A1:C1');
         worksheet.getCell('A1').value = 'TRƯỜNG CAO ĐẲNG';
@@ -1778,8 +1991,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         });
 
         let currentRow = 9;
-        for (let i = 0; i < tempStudents.length; i++) {
-          const s = tempStudents[i];
+        for (let i = 0; i < exportSortedStudents.length; i++) {
+          const s = exportSortedStudents[i];
           
           const row = worksheet.getRow(currentRow);
           row.height = 18;
@@ -1807,7 +2020,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         for (let i = 0; i < 3; i++) {
           const row = worksheet.getRow(currentRow);
           row.height = 18;
-          row.getCell(1).value = tempStudents.length + i + 1;
+          row.getCell(1).value = exportSortedStudents.length + i + 1;
           for (let c = 1; c <= 6; c++) {
             const cell = row.getCell(c);
             cell.font = { name: 'Times New Roman', size: 11 };
@@ -1893,8 +2106,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         worksheet.getCell('C5').border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
 
         let currentRow = 6;
-        for (let i = 0; i < tempStudents.length; i++) {
-          const s = tempStudents[i];
+        for (let i = 0; i < exportSortedStudents.length; i++) {
+          const s = exportSortedStudents[i];
           const parts = s.fullName.trim().split(' ');
           const ten = parts.pop() || '';
           const ho = parts.join(' ');
@@ -2389,6 +2602,19 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
             ) : (
               <button onClick={handlePrintStudentCards} className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded text-[12px] font-bold hover:bg-indigo-700 transition-colors shadow-sm"><IdCard size={14} /> In thẻ</button>
             )}
+            {viewType === 'RECOGNITION' && (
+              <button
+                onClick={handleDownloadStudentPhotos}
+                disabled={isDownloadingPhotos}
+                title="Tải ảnh 3x4 của tất cả học viên về dưới dạng file ZIP"
+                className="flex items-center gap-1.5 px-4 py-1.5 bg-violet-600 text-white rounded text-[12px] font-bold hover:bg-violet-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isDownloadingPhotos
+                  ? <Loader2 size={14} className="animate-spin" />
+                  : <Download size={14} />}
+                Tải ảnh 3x4
+              </button>
+            )}
             <button onClick={handleSaveDecision} className="px-5 py-1.5 bg-[#54a0ff] text-white rounded border border-[#2e86de] text-[12px] font-bold shadow-sm hover:brightness-105 flex items-center gap-1.5">
               <Save size={14} /> Lưu
             </button>
@@ -2430,6 +2656,20 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
                   type="text"
                   value={formData.trainingCourse}
                   onChange={e => setFormData({ ...formData, trainingCourse: e.target.value })}
+                  onBlur={(e) => {
+                    const val = e.target.value.trim();
+                    if (!val) return;
+                    
+                    const isDuplicate = decisions.some(d => 
+                      d.type === viewType && 
+                      d.trainingCourse.trim().toLowerCase() === val.toLowerCase() &&
+                      String(d.id) !== String(editingId)
+                    );
+                    
+                    if (isDuplicate) {
+                      alert(`CẢNH BÁO: Đợt/Khóa "${val}" đã tồn tại trong hệ thống. Vui lòng kiểm tra lại để tránh trùng lặp.`);
+                    }
+                  }}
                   className="flex-1 border border-slate-300 rounded-sm px-2 py-1.5 text-[12px] outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                   placeholder="Đợt/Khóa"
                 />
@@ -2474,7 +2714,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
               <div className="text-[12px] font-black text-slate-400 uppercase tracking-widest pl-2">Danh sách chính thức</div>
               {currentUser?.role === UserRole.ADMIN && (
                 <button
-                  onClick={() => setIsAddStudentModalOpen(true)}
+                  onClick={handleOpenAddStudentModal}
                   className="bg-slate-800 text-white px-4 py-1.5 rounded text-[11px] font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors shadow-sm"
                 >
                   <Plus size={14} /> Thêm thủ công
@@ -2752,15 +2992,15 @@ có ảnh</span>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {allStudents.filter(s => {
+                  const isAlreadyAssigned = tempStudents.some(ts => String(ts.id) === String(s.id));
+                  if (isAlreadyAssigned) return false;
+
                   const matchSearch = s.fullName.toLowerCase().includes(searchStudent.toLowerCase()) ||
                     s.studentCode.toLowerCase().includes(searchStudent.toLowerCase());
-                  // In Opening mode, filter by selected class, EXCLUDE assigned students,
-                  // and ONLY show students who are approved (Đã duyệt)
-                  // In Recognition, show all (or could filter differently)
+                    
                   const matchClass = viewType === 'OPENING'
                     ? (
                         (s as any).classId === formData.classId &&
-                        !assignedStudentIds.has(s.id) &&
                         (s as any).isApproved === true
                       )
                     : true;
@@ -2815,9 +3055,13 @@ có ảnh</span>
                       <span className="text-[10px] text-slate-400">{doc.date} • {doc.type.split('/')[1]?.toUpperCase() || 'FILE'}</span>
                     </div>
                   </div>
-                  <a href={doc.url} download={doc.name} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" title="Tải xuống">
+                  <button 
+                    onClick={() => downloadFile(doc.url, doc.name)} 
+                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" 
+                    title="Tải xuống"
+                  >
                     <Upload size={16} className="rotate-180" />
-                  </a>
+                  </button>
                 </div>
               ))}
             </div>
@@ -2933,21 +3177,21 @@ có ảnh</span>
               </p>
             </div>
           </div>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <button onClick={() => { setIsAuditModalOpen(true); loadAuditLogs(); }} className="bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 px-4 py-2.5 rounded-xl font-bold flex gap-2 shadow-sm transition-all">
-            <History size={20} /> Lịch sử
-          </button>
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => { setIsAuditModalOpen(true); loadAuditLogs(); }} className="bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 px-4 py-2.5 rounded-xl font-bold flex gap-2 shadow-sm transition-all">
+              <History size={20} /> Lịch sử
+            </button>
 
-          <button onClick={() => {
-            setEditingId(null);
-            setFormData({
-              number: '', signedDate: new Date().toISOString().split('T')[0], signer: 'HIỆU TRƯỞNG',
-              location: FIXED_LOCATION, company: '', classType: '', classCode: '', className: '', trainingCourse: '', notes: '', classId: '', relatedOpeningId: '', startIndex: '1'
-            });
-            setTempStudents([]);
-            setIsFormOpen(true);
-          }} className={`${viewType === 'OPENING' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'} text-white px-5 py-2.5 rounded-xl font-bold flex gap-2 shadow-lg transition-all`}><Plus /> Tạo mới</button>
+            <button onClick={() => {
+              setEditingId(null);
+              setFormData({
+                number: '', signedDate: new Date().toISOString().split('T')[0], signer: 'HIỆU TRƯỞNG',
+                location: FIXED_LOCATION, company: '', classType: '', classCode: '', className: '', trainingCourse: '', notes: '', classId: '', relatedOpeningId: '', startIndex: '1'
+              });
+              setTempStudents([]);
+              setIsFormOpen(true);
+            }} className={`${viewType === 'OPENING' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'} text-white px-5 py-2.5 rounded-xl font-bold flex gap-2 shadow-lg transition-all`}><Plus /> Tạo mới</button>
+          </div>
         </div>
       </div>
 
@@ -3065,17 +3309,7 @@ có ảnh</span>
                           {!checkIfLocked(d.id) && (
                             <>
                               <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingId(d.id);
-                                  setFormData({
-                                    number: d.number, signedDate: d.signedDate, signer: d.signer,
-                                    location: d.location, company: d.company, classType: d.classType,
-                                    classCode: d.classCode, className: d.className, trainingCourse: d.trainingCourse, notes: d.notes, classId: d.classId || '', relatedOpeningId: d.relatedOpeningId || '', startIndex: '1'
-                                  });
-                                  setTempStudents(d.students || []);
-                                  setIsFormOpen(true);
-                                }}
+                                onClick={(e) => handleOpenEditDecision(d, e)}
                                 className="p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm shadow-blue-100"
                                 title="Sửa quyết định"
                               >

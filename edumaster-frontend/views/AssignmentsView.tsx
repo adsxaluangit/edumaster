@@ -249,9 +249,9 @@ const AssignmentsView: React.FC = () => {
       const subId = String(subRef.documentId || subRef.id);
       const sub = subjects.find(s => String(s.id) === subId || String(s.documentId) === subId) || subRef;
       const subName = sub.attributes?.name || sub.name || "Môn học";
-      const totalHours = sub.attributes?.total_hours || sub.total_hours || sub.totalHours || 4;
+      const totalHours = sub.attributes?.total_hours || sub.total_hours || sub.totalHours || 5;
 
-      const sessions = Math.ceil(totalHours / 4);
+      const sessions = Math.ceil(totalHours / 5);
       for (let i = 0; i < sessions; i++) {
         sessionQueue.push({ subId, subName });
       }
@@ -856,14 +856,10 @@ const AssignmentsView: React.FC = () => {
             return `<th style="width:40px; font-size:10px; padding: 2px;"></th>`;
           }).join('');
 
-          // Empty cells to pad to SESSIONS_PER_PAGE
-          const emptySessionCells = Array(SESSIONS_PER_PAGE - sessionChunk.length)
-            .fill(`<th style="width:40px;"></th>`).join('');
-
           // Student rows
           const studentRows = studentChunk.map((s: any, idx: number) => {
             const globalIdx = sChunkIdx * STUDENTS_PER_PAGE + idx + 1;
-            const attendanceCells = Array(SESSIONS_PER_PAGE)
+            const attendanceCells = Array(sessionChunk.length)
               .fill(`<td style="background:#e8f5e9;"></td>`).join('');
             return `
               <tr>
@@ -879,7 +875,7 @@ const AssignmentsView: React.FC = () => {
           const signatureHtml = isLastStudentChunk ? `
             <tr>
               <td colspan="3" style="text-align:center; font-size:11px; font-style:italic; height:30px;">Giáo viên ký</td>
-              ${Array(SESSIONS_PER_PAGE).fill(`<td style="background:#e8f5e9;"></td>`).join('')}
+              ${Array(sessionChunk.length).fill(`<td style="background:#e8f5e9;"></td>`).join('')}
               <td></td>
             </tr>` : '';
 
@@ -937,25 +933,24 @@ const AssignmentsView: React.FC = () => {
                 <col style="width:32px"/>
                 <col style="width:110px"/>
                 <col style="width:58px"/>
-                ${Array(SESSIONS_PER_PAGE).fill('<col style="width:38px"/>').join('')}
+                ${Array(sessionChunk.length).fill('<col style="width:38px"/>').join('')}
                 <col style="width:52px"/>
               </colgroup>
               <thead>
                 <tr>
                   <th rowspan="3" style="border:1px solid black; text-align:center; vertical-align:middle; font-size:11px;">STT</th>
                   <th colspan="2" style="border:1px solid black; text-align:center; font-size:11px;">NGÀY THÁNG</th>
-                  <th colspan="${SESSIONS_PER_PAGE}" style="border:1px solid black; text-align:center; font-size:11px;">ĐIỂM DANH HÀNG NGÀY</th>
+                  <th colspan="${sessionChunk.length}" style="border:1px solid black; text-align:center; font-size:11px;">ĐIỂM DANH HÀNG NGÀY</th>
                   <th rowspan="3" style="border:1px solid black; text-align:center; vertical-align:middle; font-size:11px;">Ghi chú</th>
                 </tr>
                 <tr>
                   <th rowspan="2" style="border:1px solid black; text-align:left; padding-left:4px; font-size:11px; vertical-align:middle;">HỌ VÀ TÊN</th>
                   <th style="border:1px solid black; text-align:center; font-size:11px; vertical-align:middle;">NGÀY/BUỔI</th>
                   ${sessionDateCells}
-                  ${emptySessionCells}
                 </tr>
                 <tr>
                   <td style="border:1px solid black; text-align:center; font-size:12px; font-weight:bold; height:24px;">SỐ TIẾT</td>
-                  ${Array(SESSIONS_PER_PAGE).fill(`<td style="border:1px solid black; background:#fff9c4;"></td>`).join('')}
+                  ${Array(sessionChunk.length).fill(`<td style="border:1px solid black; background:#fff9c4;"></td>`).join('')}
                 </tr>
               </thead>
               <tbody>
