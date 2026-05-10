@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, X, Upload, Save, CheckCircle, LogIn, Lock, User, ChevronDown, AlertCircle } from 'lucide-react';
 import { Student } from '../types';
-import { MOCK_STUDENTS, MOCK_NATIONS, MOCK_CLASSES } from '../mockData';
+
 import { fetchCategory, createCategory, COLLECTIONS, uploadFile, checkDuplicateStudent } from '../services/api';
 import { parseToISO } from '../utils/dateUtils';
 
@@ -141,11 +141,11 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                 if (classes && classes.length > 0) {
                     setAvailableClasses(classes);
                 } else {
-                    setAvailableClasses(MOCK_CLASSES);
+                    setAvailableClasses([]);
                 }
             } catch (error) {
                 console.error("Failed to load classes", error);
-                setAvailableClasses(MOCK_CLASSES);
+                setAvailableClasses([]);
             }
         };
         loadClasses();

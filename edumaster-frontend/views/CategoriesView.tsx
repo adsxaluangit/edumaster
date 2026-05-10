@@ -57,7 +57,7 @@ interface ClassRoom {
 
 // Removed local Subject interface as it is now imported from ../types
 
-// Initial data loaded from mockData.ts
+
 
 const CategoriesView: React.FC = () => {
   console.log('CategoriesView mounting');
