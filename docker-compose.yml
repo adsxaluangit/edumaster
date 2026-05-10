@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:18-alpine
+    image: postgres:17-alpine
     container_name: edumaster_db
     restart: always
     environment:
@@ -23,8 +23,6 @@ services:
       -c effective_io_concurrency=200
     volumes:
       - edumaster_db_data:/var/lib/postgresql/data
-      - ./edumaster-backend/database/backup_13042026_022236.sql:/dump.backup:ro
-      - ./edumaster-backend/database/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
     networks:
       - edumaster_net
 
@@ -72,6 +70,26 @@ services:
       - "81:80"
     depends_on:
       - backend
+    networks:
+      - edumaster_net
+
+  backup:
+    image: postgres:17-alpine
+    container_name: edumaster_backup
+    restart: always
+    environment:
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${DATABASE_NAME:-edumaster}
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-postgres}
+      PGPASSWORD: ${DATABASE_PASSWORD:-123456}
+    volumes:
+      - ./scripts/backup.sh:/backup.sh:ro
+      - ./scripts/entrypoint-backup.sh:/entrypoint-backup.sh:ro
+      - ./edumaster-backend/database/auto-backups:/backups
+    entrypoint: ["sh", "/entrypoint-backup.sh"]
+    depends_on:
+      - db
     networks:
       - edumaster_net
 

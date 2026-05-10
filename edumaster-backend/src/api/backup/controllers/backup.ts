@@ -91,11 +91,35 @@ export default {
           const stats = fs.statSync(outputPath);
           const sizeKB = Math.round(stats.size / 1024);
           strapi.log.info(`[Backup] Success: ${filename} (${sizeKB} KB)`);
+
+          // --- Auto-cleanup: giữ tối đa 10 bản backup thủ công ---
+          const KEEP_COUNT = 10;
+          const deletedFiles: string[] = [];
+          try {
+            const allFiles = fs.readdirSync(outputDir)
+              .filter(f => /^backup_\d{8}_\d{6}\.sql$/.test(f))
+              .map(f => ({
+                name: f,
+                time: fs.statSync(path.join(outputDir, f)).mtimeMs,
+              }))
+              .sort((a, b) => b.time - a.time); // mới nhất trước
+
+            const toDelete = allFiles.slice(KEEP_COUNT);
+            for (const f of toDelete) {
+              fs.unlinkSync(path.join(outputDir, f.name));
+              deletedFiles.push(f.name);
+              strapi.log.info(`[Backup] Đã xóa bản cũ: ${f.name}`);
+            }
+          } catch (cleanupErr: any) {
+            strapi.log.warn(`[Backup] Cleanup warning: ${cleanupErr.message}`);
+          }
+
           ctx.body = {
             success: true,
             filename,
             sizeKB,
-            message: `Backup thành công! File: ${filename} (${sizeKB} KB)`,
+            message: `Backup thành công! File: ${filename} (${(sizeKB / 1024).toFixed(1)} MB)${deletedFiles.length > 0 ? ` — Đã xóa ${deletedFiles.length} bản cũ` : ''}`,
+            deletedFiles,
           };
           resolve(null);
         } else {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, User, BookOpen, Award, FileText, Calendar, Paperclip, Download } from 'lucide-react';
 import { fetchCategory, COLLECTIONS } from '../services/api';
+import { downloadFile } from '../utils/fileUtils';
 
 interface LookupViewProps {
     onRegisterAnother?: (student: any) => void;
@@ -198,15 +199,6 @@ const LookupView: React.FC<LookupViewProps> = ({ onRegisterAnother }) => {
         };
     };
 
-    const downloadFile = (url: string, fileName: string) => {
-        const link = document.createElement('a');
-        link.href = url;
-        link.target = "_blank";
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
