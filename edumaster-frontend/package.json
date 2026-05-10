@@ -9,6 +9,7 @@
         "preview": "vite preview"
     },
     "dependencies": {
+        "@fontsource/inter": "^5.1.0",
         "@types/jszip": "^3.4.0",
         "exceljs": "^4.4.0",
         "jszip": "^3.10.1",
