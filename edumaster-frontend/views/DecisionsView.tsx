@@ -369,7 +369,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   const loadDecisions = async () => {
     // We need deep populate to get students' documents and photo within the decision
     // Note: Using explicit relation population (true) instead of * to avoid validation errors with deep nested relations
-    const data = await fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?sort[0]=signed_date:desc&sort[1]=id:desc&populate[school_class]=true&populate[related_decision]=true&populate[students][populate][documents][fields][0]=name&populate[students][populate][documents][fields][1]=url&populate[students][populate][documents][fields][2]=type&populate[students][fields][0]=full_name&populate[students][fields][1]=dob&populate[students][fields][2]=gender&populate[students][fields][3]=card_number&populate[students][fields][4]=id_number&populate[students][fields][5]=student_code&populate[students][fields][6]=pob&populate[students][fields][7]=photo`);
+    const data = await fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?sort[0]=signed_date:desc&sort[1]=id:desc&populate[school_class]=true&populate[related_decision]=true&populate[students][populate][documents][fields][0]=name&populate[students][populate][documents][fields][1]=url&populate[students][populate][documents][fields][2]=type&populate[students][fields][0]=full_name&populate[students][fields][1]=dob&populate[students][fields][2]=gender&populate[students][fields][3]=card_number&populate[students][fields][4]=id_number&populate[students][fields][5]=student_code&populate[students][fields][6]=pob&populate[students][fields][7]=photo&populate[students][fields][8]=address`);
     if (data) {
       const mapped = data.map((d: any, index: number) => {
         const classData = d.school_class?.data || d.school_class;
@@ -436,7 +436,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   // This scales to 500k+ students because we only fetch students for one class at a time
   const loadStudentsByClass = async (classDocId: string): Promise<Student[]> => {
     try {
-      const params = `filters[school_class][documentId][$eq]=${classDocId}&filters[is_approved][$eq]=true&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=is_approved&fields[9]=company&fields[10]=phone&populate[school_class]=true&pagination[pageSize]=500`;
+      const params = `filters[school_class][documentId][$eq]=${classDocId}&filters[is_approved][$eq]=true&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=is_approved&fields[9]=company&fields[10]=phone&fields[11]=address&populate[school_class]=true&pagination[pageSize]=500`;
       const data = await fetchCategory(`${COLLECTIONS.STUDENTS}?${params}`);
       if (!data) return [];
       return data.map((d: any) => {
@@ -451,7 +451,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
           lastName: d.last_name || '',
           dob: d.dob || '',
           pob: d.pob || '',
-          address: '',
+          address: d.address || '',
           gender: d.gender || '',
           idNumber: d.id_number || '',
           cardNumber: '',
