@@ -1,8 +1,8 @@
-#!/bin/sh
+﻿#!/bin/sh
 # ============================================================
 # EduMaster - Auto Backup Script
-# Chạy tự động mỗi ngày lúc 2:00 AM
-# Giữ lại tối đa 7 bản backup gần nhất
+# Cháº¡y tá»± Ä‘á»™ng má»—i ngÃ y lÃºc 2:00 AM
+# Giá»¯ láº¡i tá»‘i Ä‘a 7 báº£n backup gáº§n nháº¥t
 # ============================================================
 
 BACKUP_DIR="/backups"
@@ -10,9 +10,9 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 FILENAME="edumaster_backup_${TIMESTAMP}.sql"
 KEEP_DAYS=7
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] ===== Bắt đầu backup ====="
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] ===== Báº¯t Ä‘áº§u backup ====="
 
-# Tạo thư mục nếu chưa có
+# Táº¡o thÆ° má»¥c náº¿u chÆ°a cÃ³
 mkdir -p "$BACKUP_DIR"
 
 # Dump database
@@ -27,18 +27,18 @@ pg_dump \
 
 if [ $? -eq 0 ]; then
   SIZE=$(du -sh "$BACKUP_DIR/$FILENAME" | cut -f1)
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✅ Backup thành công: $FILENAME ($SIZE)"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] âœ… Backup thÃ nh cÃ´ng: $FILENAME ($SIZE)"
 else
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ❌ Backup THẤT BẠI!"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] âŒ Backup THáº¤T Báº I!"
   exit 1
 fi
 
-# Xóa các bản backup cũ hơn KEEP_DAYS ngày
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🗑️  Dọn backup cũ hơn ${KEEP_DAYS} ngày..."
+# XÃ³a cÃ¡c báº£n backup cÅ© hÆ¡n KEEP_DAYS ngÃ y
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] ðŸ—‘ï¸  Dá»n backup cÅ© hÆ¡n ${KEEP_DAYS} ngÃ y..."
 find "$BACKUP_DIR" -name "edumaster_backup_*.sql" -mtime +${KEEP_DAYS} -delete
 
-# Liệt kê các bản backup hiện có
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] 📁 Danh sách backup hiện có:"
+# Liá»‡t kÃª cÃ¡c báº£n backup hiá»‡n cÃ³
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] ðŸ“ Danh sÃ¡ch backup hiá»‡n cÃ³:"
 ls -lh "$BACKUP_DIR"/edumaster_backup_*.sql 2>/dev/null | awk '{print "   " $NF " - " $5}'
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] ===== Hoàn thành ====="
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] ===== HoÃ n thÃ nh ====="
