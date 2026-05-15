@@ -790,11 +790,14 @@ const AssignmentsView: React.FC = () => {
       return;
     }
 
-    // Sort students by last name
+    // Sắp xếp học viên theo tên (chữ cuối) theo vần alphabet tiếng Việt
     students.sort((a: any, b: any) => {
-      const nameA = a.fullName.split(' ').pop() || '';
-      const nameB = b.fullName.split(' ').pop() || '';
-      return nameA.localeCompare(nameB, 'vi');
+      const lastA = (a.fullName || '').trim().split(/\s+/).pop() || '';
+      const lastB = (b.fullName || '').trim().split(/\s+/).pop() || '';
+      const cmp = lastA.localeCompare(lastB, 'vi', { sensitivity: 'base' });
+      if (cmp !== 0) return cmp;
+      // Nếu tên cuối giống nhau → so sánh toàn bộ họ tên
+      return (a.fullName || '').localeCompare(b.fullName || '', 'vi', { sensitivity: 'base' });
     });
 
     // 2. Group rows by subject
@@ -856,7 +859,7 @@ const AssignmentsView: React.FC = () => {
             return `<th style="width:40px; font-size:10px; padding: 2px;"></th>`;
           }).join('');
 
-          // Student rows
+          // Student rows — name merges with NGÀY/BUỔI column (colspan=2)
           const studentRows = studentChunk.map((s: any, idx: number) => {
             const globalIdx = sChunkIdx * STUDENTS_PER_PAGE + idx + 1;
             const attendanceCells = Array(sessionChunk.length)
@@ -864,8 +867,7 @@ const AssignmentsView: React.FC = () => {
             return `
               <tr>
                 <td style="text-align:center; font-size:11px;">${globalIdx}</td>
-                <td style="text-align:left; padding-left:4px; font-size:11px; text-transform:uppercase; font-weight:bold;">${s.fullName}</td>
-                <td style="text-align:center; font-size:11px;"></td>
+                <td colspan="2" style="text-align:left; padding-left:4px; font-size:11px; text-transform:uppercase; font-weight:bold;">${s.fullName}</td>
                 ${attendanceCells}
                 <td></td>
               </tr>`;
