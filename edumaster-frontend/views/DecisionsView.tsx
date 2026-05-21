@@ -2410,8 +2410,6 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
              nameA.lastObj.localeCompare(nameB.lastObj, 'vi', { sensitivity: 'base' });
     });
 
-    const dateNow = new Date();
-    const dateStr = `Ngày ${dateNow.getDate().toString().padStart(2, '0')} tháng ${(dateNow.getMonth() + 1).toString().padStart(2, '0')} năm ${dateNow.getFullYear()}`;
 
     // Tạo các dòng dữ liệu 
     let studentRows = '<tbody>';
@@ -2541,7 +2539,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
               <tr>
                 <td style="width: 50%;"></td>
                 <td style="width: 50%;">
-                  <div class="italic" style="font-size: 13pt; margin-bottom: 5px;">Hải Phòng, ${dateStr}</div>
+                  <div class="italic" style="font-size: 13pt; margin-bottom: 5px;">Hải Phòng, ngày ...... tháng ...... năm 20...</div>
                 </td>
               </tr>
               <tr>
