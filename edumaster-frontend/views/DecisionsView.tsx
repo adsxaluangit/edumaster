@@ -3246,21 +3246,21 @@ có ảnh</span>
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-800 text-white">
-                    <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-slate-300 w-16 text-center">STT</th>
-                    <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-slate-300">Số QĐ</th>
-                    <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-slate-300">Lớp Đào Tạo</th>
-                    <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-slate-300">Đợt/Khóa</th>
-                    <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-slate-300">Ngày Ký</th>
-                    <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-slate-300 text-center">Học Viên</th>
-                    <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-slate-300">Người Ký</th>
-                    <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-slate-300 text-right">Thao Tác</th>
+                    <th className="px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 w-10 text-center">STT</th>
+                    <th className="px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 w-24">Số QĐ</th>
+                    <th className="px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Lớp Đào Tạo</th>
+                    <th className="px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 w-28">Đợt/Khóa</th>
+                    <th className="px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 w-28">Ngày Ký</th>
+                    <th className="px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 w-20 text-center">Học Viên</th>
+                    <th className="px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 w-28">Người Ký</th>
+                    <th className="px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 w-24 text-right">Thao Tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredDecisions.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((d, index) => (
                     <tr
                       key={d.id}
-                      className={`transition-all cursor-pointer group ${checkIfLocked(d.id) ? 'bg-slate-50/50 grayscale-[0.3]' : 'hover:bg-slate-50/80'}`}
+                      className={`transition-all cursor-pointer group ${checkIfLocked(d.id) ? 'bg-slate-50/50 grayscale-[0.3]' : 'hover:bg-blue-50/40'}`}
                       onClick={() => {
                         if (checkIfLocked(d.id)) {
                           alert("Quyết định này đã bị khóa (Đã có QĐ Công nhận). Bạn chỉ có thể xem, không thể sửa.");
@@ -3275,60 +3275,60 @@ có ảnh</span>
                         setIsFormOpen(true);
                       }}
                     >
-                      <td className="px-6 py-5 text-sm font-bold text-slate-400 text-center">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
-                      <td className="px-6 py-5">
-                        <span className="inline-flex px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-black border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-colors uppercase tracking-tight">
+                      <td className="px-3 py-2.5 text-xs font-medium text-slate-400 text-center">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
+                      <td className="px-3 py-2.5">
+                        <span className="inline-flex px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-semibold border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                           {d.number}
                         </span>
                       </td>
-                      <td className="px-6 py-5 text-sm font-black text-slate-700 uppercase group-hover:text-blue-600 transition-colors">
+                      <td className="px-3 py-2.5 text-[12.5px] font-medium text-slate-700 group-hover:text-blue-600 transition-colors leading-snug">
                         {d.className}
                       </td>
-                      <td className="px-6 py-5 text-sm font-bold text-slate-500">
+                      <td className="px-3 py-2.5 text-xs text-slate-500">
                         {d.trainingCourse || '---'}
                       </td>
-                      <td className="px-6 py-5">
-                        <div className="flex items-center gap-2 text-sm text-slate-600 font-bold">
-                          <Calendar size={14} className="text-slate-300" />
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                          <Calendar size={12} className="text-slate-300" />
                           {d.signedDate ? new Date(d.signedDate).toLocaleDateString('vi-VN') : '--'}
                         </div>
                       </td>
-                      <td className="px-6 py-5 text-center">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-black">
-                          <Users size={12} />
+                      <td className="px-3 py-2.5 text-center">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full text-xs font-medium">
+                          <Users size={10} />
                           {d.students ? d.students.length : 0}
                         </span>
                       </td>
-                      <td className="px-6 py-5 text-sm text-slate-500 font-medium">
+                      <td className="px-3 py-2.5 text-xs text-slate-500">
                         {d.signer}
                       </td>
-                      <td className="px-6 py-5 text-right">
-                        <div className="flex justify-end gap-2">
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="flex justify-end gap-1.5">
                           {!checkIfLocked(d.id) && (
                             <>
                               <button
                                 onClick={(e) => handleOpenEditDecision(d, e)}
-                                className="p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm shadow-blue-100"
+                                className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all"
                                 title="Sửa quyết định"
                               >
-                                <Edit size={16} />
+                                <Edit size={14} />
                               </button>
                               <button
                                 onClick={(e) => handleDeleteDecision(d.id, e)}
-                                className="p-2.5 bg-red-50 text-red-500 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm shadow-red-100"
+                                className="p-1.5 bg-red-50 text-red-500 rounded-lg hover:bg-red-600 hover:text-white transition-all"
                                 title="Xóa quyết định"
                               >
-                                <Trash2 size={16} />
+                                <Trash2 size={14} />
                               </button>
                             </>
                           )}
                           {checkIfLocked(d.id) && (
                             <button
                               onClick={(e) => handleUnlockDecision(d.id, e)}
-                              className="px-3 py-1 bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white transition-all text-[10px] font-black uppercase rounded-lg border border-amber-100 flex items-center gap-1 shadow-sm"
-                              title="Bấm để mở khóa (Xóa quyết định công nhận liên quan)"
+                              className="px-2 py-1 bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white transition-all text-[10px] font-semibold rounded border border-amber-100 flex items-center gap-1"
+                              title="Bấm để mở khóa"
                             >
-                              <ShieldCheck size={12} /> Đã khóa
+                              <ShieldCheck size={11} /> Đã khóa
                             </button>
                           )}
                         </div>
