@@ -2568,55 +2568,73 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   };
 
   const renderDecisionForm = () => (
-    <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white w-full max-w-7xl rounded-xl shadow-2xl overflow-hidden border border-slate-300 flex flex-col h-[90vh]">
-        {/* Header - Fixed to match Student form style */}
-        <div className="bg-white px-6 py-3 border-b border-slate-200 flex justify-between items-center shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-6 bg-blue-600 rounded-full"></div>
-            <h2 className="text-[14px] font-black text-slate-800 uppercase tracking-tight">
-              {viewType === 'OPENING' ? 'Lập Quyết định Mở lớp' : 'Lập Quyết định Công nhận'}
-            </h2>
+    <div className="fixed inset-0 bg-black/60 z-[150] flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-white w-full max-w-7xl rounded-xl shadow-2xl overflow-hidden border border-slate-300 flex flex-col h-[92vh]">
+        {/* Header - slate-800 giống Duyệt thi */}
+        <div className="bg-slate-800 text-white px-4 py-3 flex justify-between items-center shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-1.5 bg-slate-700 rounded-md">
+              <FileText size={16} className={viewType === 'OPENING' ? 'text-blue-400' : 'text-emerald-400'} />
+            </div>
+            <div>
+              <h2 className="text-[15px] font-bold">
+                {viewType === 'OPENING' ? 'Lập Quyết định Mở lớp' : 'Lập Quyết định Công nhận'}
+              </h2>
+              {editingId && (
+                <p className="text-[11px] text-slate-400 mt-0.5">Chỉnh sửa • {formData.number || '---'}</p>
+              )}
+            </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1.5">
             {viewType === 'OPENING' && (
               <>
-                <button onClick={handleExportTuitionExcel} className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white rounded text-[12px] font-bold hover:bg-emerald-700 transition-colors shadow-sm">
-                  <FileSpreadsheet size={14} /> Bảng kê
+                <button onClick={handleExportTuitionExcel} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-md text-[12px] font-semibold transition-colors">
+                  <FileSpreadsheet size={13} /> Bảng kê
                 </button>
-                <button onClick={handleExportDocHandover} className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-600 text-white rounded text-[12px] font-bold hover:bg-amber-700 transition-colors shadow-sm">
-                  <FileText size={14} /> BG Tài Liệu
+                <button onClick={handleExportDocHandover} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-700 hover:bg-amber-600 text-white rounded-md text-[12px] font-semibold transition-colors">
+                  <FileText size={13} /> BG Tài Liệu
                 </button>
               </>
             )}
             {viewType === 'RECOGNITION' ? (
-              <button onClick={handlePrintHandover} className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white rounded text-[12px] font-bold hover:bg-emerald-700 transition-colors shadow-sm"><Printer size={14} /> DS Bàn giao</button>
+              <button onClick={handlePrintHandover} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-md text-[12px] font-semibold transition-colors">
+                <Printer size={13} /> DS Bàn giao
+              </button>
             ) : (
-              <button onClick={handleExportExcel} className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white rounded text-[12px] font-bold hover:bg-emerald-700 transition-colors shadow-sm"><FileSpreadsheet size={14} /> Xuất Excel</button>
+              <button onClick={handleExportExcel} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-md text-[12px] font-semibold transition-colors">
+                <FileSpreadsheet size={13} /> Xuất Excel
+              </button>
             )}
-            <button onClick={handlePrintDecision} className="flex items-center gap-1.5 px-4 py-1.5 bg-slate-700 text-white rounded text-[12px] font-bold hover:bg-slate-800 transition-colors shadow-sm"><Printer size={14} /> Xuất QĐ</button>
+            <button onClick={handlePrintDecision} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-600 hover:bg-slate-500 text-white rounded-md text-[12px] font-semibold transition-colors">
+              <Printer size={13} /> Xuất QĐ
+            </button>
             {viewType === 'RECOGNITION' ? (
-              <button onClick={handlePrintRequestList} className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded text-[12px] font-bold hover:bg-indigo-700 transition-colors shadow-sm"><ScrollText size={14} /> DS Đề nghị</button>
+              <button onClick={handlePrintRequestList} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white rounded-md text-[12px] font-semibold transition-colors">
+                <ScrollText size={13} /> DS Đề nghị
+              </button>
             ) : (
-              <button onClick={handlePrintStudentCards} className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded text-[12px] font-bold hover:bg-indigo-700 transition-colors shadow-sm"><IdCard size={14} /> In thẻ</button>
+              <button onClick={handlePrintStudentCards} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white rounded-md text-[12px] font-semibold transition-colors">
+                <IdCard size={13} /> In thẻ
+              </button>
             )}
             {viewType === 'RECOGNITION' && (
               <button
                 onClick={handleDownloadStudentPhotos}
                 disabled={isDownloadingPhotos}
                 title="Tải ảnh 3x4 của tất cả học viên về dưới dạng file ZIP"
-                className="flex items-center gap-1.5 px-4 py-1.5 bg-violet-600 text-white rounded text-[12px] font-bold hover:bg-violet-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-violet-700 hover:bg-violet-600 text-white rounded-md text-[12px] font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {isDownloadingPhotos
-                  ? <Loader2 size={14} className="animate-spin" />
-                  : <Download size={14} />}
+                {isDownloadingPhotos ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
                 Tải ảnh 3x4
               </button>
             )}
-            <button onClick={handleSaveDecision} className="px-5 py-1.5 bg-[#54a0ff] text-white rounded border border-[#2e86de] text-[12px] font-bold shadow-sm hover:brightness-105 flex items-center gap-1.5">
-              <Save size={14} /> Lưu
+            <div className="w-px h-5 bg-slate-600 mx-0.5"></div>
+            <button onClick={handleSaveDecision} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-md text-[12px] font-semibold shadow-sm shadow-green-900/50 transition-colors">
+              <Save size={13} /> Lưu
             </button>
-            <button onClick={() => setIsFormOpen(false)} className="px-5 py-1.5 bg-white text-slate-700 rounded border border-slate-300 text-[12px] font-bold shadow-sm hover:bg-slate-50 transition-colors">Đóng</button>
+            <button onClick={() => setIsFormOpen(false)} className="p-1.5 hover:bg-slate-700 rounded-md transition-colors text-slate-400 hover:text-white">
+              <X size={18} />
+            </button>
           </div>
         </div>
 
