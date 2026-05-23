@@ -3158,38 +3158,60 @@ có ảnh</span>
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="p-6 max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-white rounded-xl shadow-sm border border-slate-200">
-              <FileText size={28} className={viewType === 'OPENING' ? "text-blue-600" : "text-emerald-600"} />
+      <div className="p-4 max-w-7xl mx-auto">
+        <div className="flex items-center gap-4 mb-5">
+
+          {/* Left: Icon + Title */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="p-2.5 bg-white rounded-xl shadow-sm border border-slate-200">
+              <FileText size={22} className={viewType === 'OPENING' ? "text-blue-600" : "text-emerald-600"} />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-800">
+              <h1 className="text-base font-bold text-slate-800 leading-tight">
                 {viewType === 'OPENING' ? "Quản lý Quyết định Mở lớp" : "Quản lý Quyết định Công nhận"}
               </h1>
-              <p className="text-sm text-slate-500">
-                {viewType === 'OPENING'
-                  ? "Quản lý các quyết định mở lớp đào tạo"
-                  : "Quản lý các quyết định công nhận tốt nghiệp và cấp chứng chỉ"}
+              <p className="text-xs text-slate-400">
+                {viewType === 'OPENING' ? "Quản lý các quyết định mở lớp đào tạo" : "Quản lý các quyết định công nhận tốt nghiệp và cấp chứng chỉ"}
               </p>
             </div>
           </div>
-          <div className="flex gap-2 flex-wrap">
-            <button onClick={() => { setIsAuditModalOpen(true); loadAuditLogs(); }} className="bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 px-4 py-2.5 rounded-xl font-bold flex gap-2 shadow-sm transition-all">
-              <History size={20} /> Lịch sử
-            </button>
 
-            <button onClick={() => {
-              setEditingId(null);
-              setFormData({
-                number: '', signedDate: new Date().toISOString().split('T')[0], signer: 'HIỆU TRƯỞNG',
-                location: FIXED_LOCATION, company: '', classType: '', classCode: '', className: '', trainingCourse: '', notes: '', classId: '', relatedOpeningId: '', startIndex: '1'
-              });
-              setTempStudents([]);
-              setIsFormOpen(true);
-            }} className={`${viewType === 'OPENING' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'} text-white px-5 py-2.5 rounded-xl font-bold flex gap-2 shadow-lg transition-all`}><Plus /> Tạo mới</button>
+          {/* Center: Search Bar */}
+          <div className="flex-1 relative group">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+            <input
+              type="text"
+              placeholder="Tìm theo số QĐ, tên lớp, khóa đào tạo..."
+              value={mainSearchTerm}
+              onChange={e => setMainSearchTerm(e.target.value)}
+              className="pl-9 pr-4 py-2 w-full bg-white border border-slate-200 rounded-lg text-sm outline-none shadow-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition-all"
+            />
           </div>
+
+          {/* Right: Buttons */}
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={() => { setIsAuditModalOpen(true); loadAuditLogs(); }}
+              className="bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow-sm transition-all"
+            >
+              <History size={15} /> Lịch sử
+            </button>
+            <button
+              onClick={() => {
+                setEditingId(null);
+                setFormData({
+                  number: '', signedDate: new Date().toISOString().split('T')[0], signer: 'HIỆU TRƯỞNG',
+                  location: FIXED_LOCATION, company: '', classType: '', classCode: '', className: '', trainingCourse: '', notes: '', classId: '', relatedOpeningId: '', startIndex: '1'
+                });
+                setTempStudents([]);
+                setIsFormOpen(true);
+              }}
+              className={`${viewType === 'OPENING' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow-sm transition-all`}
+            >
+              <Plus size={15} /> Tạo mới
+            </button>
+          </div>
+
         </div>
       </div>
 
@@ -3215,17 +3237,12 @@ có ảnh</span>
 
       {
         error && (
-          <div className="mb-6 bg-red-50 border border-red-100 text-red-600 p-4 rounded-xl flex items-center gap-3 animate-pulse">
-            <Search size={20} />
+          <div className="px-6 mb-4 bg-red-50 border border-red-100 text-red-600 p-3 rounded-lg flex items-center gap-2 text-sm mx-6">
+            <Search size={15} />
             <span className="font-medium">{error}</span>
           </div>
         )
       }
-
-      <div className="mb-8 relative group">
-        <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-        <input type="text" placeholder="Tìm theo số QĐ, tên lớp, khóa đào tạo..." value={mainSearchTerm} onChange={e => setMainSearchTerm(e.target.value)} className="pl-12 pr-4 py-4 w-full bg-white border border-slate-200 rounded-2xl outline-none shadow-sm focus:ring-4 focus:ring-blue-50 transition-all border-blue-100" />
-      </div>
 
       {
         loading ? (
