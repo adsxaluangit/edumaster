@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { FileSpreadsheet, RefreshCw, Trash2, Plus, Search, Filter, ChevronDown, X, Camera, Save, Calendar, User, Upload, Check, Phone, MapPin, Briefcase, Flag, School, Edit3, Image as ImageIcon, FileText, CheckCircle2, XCircle, ShieldCheck, Printer } from 'lucide-react';
 import { Student } from '../types';
+import ExcelJS from 'exceljs';
 
 import { fetchCategory, fetchCategoryPaginated, createCategory, updateCategory, deleteCategory, COLLECTIONS, uploadFile, checkDuplicateStudent } from '../services/api';
 import { formatDate, parseToISO } from '../utils/dateUtils';
@@ -201,6 +202,106 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   // Filtered Students
   // When class filter active: frontend also strips out students assigned to OPENING decisions (see loadData above)
   const filteredStudents = students;
+
+  // Export Excel
+  const handleExportExcel = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const ws = workbook.addWorksheet('Danh sách học viên');
+
+      ws.columns = [
+        { header: 'STT', key: 'stt', width: 6 },
+        { header: 'Mã HV / CCCD', key: 'studentCode', width: 18 },
+        { header: 'Họ và Tên', key: 'fullName', width: 28 },
+        { header: 'Giới tính', key: 'gender', width: 10 },
+        { header: 'Ngày sinh', key: 'dob', width: 14 },
+        { header: 'Nơi sinh', key: 'pob', width: 22 },
+        { header: 'Dân tộc', key: 'ethnicity', width: 12 },
+        { header: 'Quốc tịch', key: 'nationality', width: 12 },
+        { header: 'Số điện thoại', key: 'phone', width: 16 },
+        { header: 'Số CCCD', key: 'idNumber', width: 18 },
+        { header: 'Lớp học', key: 'className', width: 35 },
+        { header: 'Mã lớp', key: 'classCode', width: 14 },
+        { header: 'Công ty / Đơn vị', key: 'company', width: 28 },
+        { header: 'Địa chỉ', key: 'address', width: 30 },
+        { header: 'Nhóm', key: 'group', width: 10 },
+      ];
+
+      // Style header row
+      const headerRow = ws.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      headerRow.height = 28;
+      headerRow.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+        cell.border = {
+          top: { style: 'thin' }, left: { style: 'thin' },
+          bottom: { style: 'thin' }, right: { style: 'thin' }
+        };
+      });
+
+      // Add data rows
+      filteredStudents.forEach((s, idx) => {
+        const row = ws.addRow({
+          stt: idx + 1,
+          studentCode: s.studentCode || '',
+          fullName: s.fullName || '',
+          gender: s.gender || '',
+          dob: s.dob ? formatDate(s.dob) : '',
+          pob: (s as any).pob || '',
+          ethnicity: (s as any).ethnicity || '',
+          nationality: (s as any).nationality || '',
+          phone: s.phone || '',
+          idNumber: (s as any).idNumber || '',
+          className: s.className || '',
+          classCode: s.classCode || '',
+          company: s.company || '',
+          address: (s as any).address || '',
+          group: s.group || '',
+        });
+
+        row.height = 20;
+        row.eachCell((cell, colNum) => {
+          cell.border = {
+            top: { style: 'thin' }, left: { style: 'thin' },
+            bottom: { style: 'thin' }, right: { style: 'thin' }
+          };
+          cell.alignment = { vertical: 'middle', wrapText: false };
+          // Center: STT, Giới tính, Ngày sinh, Mã lớp, Nhóm
+          if ([1, 4, 5, 12, 15].includes(colNum)) {
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          }
+          // Alternating row color
+          if (idx % 2 === 1) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+          }
+        });
+      });
+
+      // Auto-fit (freeze header)
+      ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
+
+      const today = new Date();
+      const dateStr = `${String(today.getDate()).padStart(2,'0')}${String(today.getMonth()+1).padStart(2,'0')}${today.getFullYear()}`;
+      const fileName = selectedClassFilter
+        ? `DanhSach_${selectedClassFilter.replace(/[^a-zA-Z0-9]/g, '_')}_${dateStr}.xlsx`
+        : `DanhSach_HocVien_${dateStr}.xlsx`;
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Export Excel failed:', e);
+      alert('Lỗi khi xuất Excel. Vui lòng thử lại.');
+    }
+  };
 
   // --- Duplicate check helper (called on CCCD blur / class change) ---
   const runDuplicateCheck = async (idNumber: string, classId: string, excludeId?: string | null) => {
@@ -1448,7 +1549,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
           </select>
         </div>
         <div className="flex gap-2 mr-2">
-          <button className="px-4 py-1.5 bg-slate-50 text-slate-700 rounded border border-slate-300 hover:bg-slate-100 transition-all flex items-center gap-2 text-[12px] font-bold shadow-sm"><FileSpreadsheet size={16} /> Export Excel</button>
+          <button onClick={handleExportExcel} className="px-4 py-1.5 bg-slate-50 text-slate-700 rounded border border-slate-300 hover:bg-slate-100 transition-all flex items-center gap-2 text-[12px] font-bold shadow-sm"><FileSpreadsheet size={16} /> Export Excel</button>
           <button onClick={loadData} className="px-4 py-1.5 bg-[#54a0ff] text-white rounded border border-[#2e86de] hover:brightness-105 transition-all flex items-center gap-2 text-[12px] font-bold shadow-sm"><RefreshCw size={16} /> Tải lại</button>
           <button onClick={() => { setEditingId(null); setFormData({ studentCode: '', fullName: '', dob: '', pob: '', ethnicity: '', phone: '', idNumber: '', group: '', classCode: '', classId: '', nationality: 'Việt Nam', address: '', company: '', gender: 'Nam', cardNumber: '', ['notes' as any]: '' } as any); setStudentPhoto(null); setIsFormOpen(true); }} className="px-4 py-1.5 bg-[#54a0ff] text-white rounded border border-[#2e86de] hover:brightness-105 transition-all flex items-center gap-2 text-[12px] font-bold shadow-sm"><Plus size={16} /> Thêm mới</button>
         </div>
