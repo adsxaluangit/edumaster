@@ -480,28 +480,32 @@ const GradeEntryView: React.FC = () => {
     };
 
     return (
-        <div className="p-6 max-w-7xl mx-auto">
-            <div className="mb-8 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="p-3 bg-white rounded-xl shadow-sm border border-slate-200">
-                        <Calculator size={28} className="text-green-600" />
+        <div className="p-4 max-w-7xl mx-auto">
+            <div className="mb-5 flex items-center gap-4">
+
+                {/* Left: Icon + Title */}
+                <div className="flex items-center gap-3 shrink-0">
+                    <div className="p-2.5 bg-white rounded-xl shadow-sm border border-slate-200">
+                        <Calculator size={22} className="text-green-600" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-slate-800">Nhập điểm thi</h1>
-                        <p className="text-slate-500">Quản lý điểm thi kết thúc học phần theo Quyết định mở lớp</p>
+                        <h1 className="text-base font-bold text-slate-800 leading-tight">Nhập điểm thi</h1>
+                        <p className="text-xs text-slate-400">Quản lý điểm thi kết thúc học phần theo Quyết định mở lớp</p>
                     </div>
                 </div>
-            </div>
 
-            <div className="mb-6 relative">
-                <Search size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                    type="text"
-                    placeholder="Tìm theo quyết định, lớp..."
-                    className="pl-10 pr-4 py-3 w-full bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none transition-all shadow-sm"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
+                {/* Center: Search Bar */}
+                <div className="flex-1 relative group">
+                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-green-500 transition-colors" />
+                    <input
+                        type="text"
+                        placeholder="Tìm theo quyết định, lớp..."
+                        className="pl-9 pr-4 py-2 w-full bg-white border border-slate-200 rounded-lg text-sm outline-none shadow-sm focus:ring-2 focus:ring-green-100 focus:border-green-300 transition-all"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
