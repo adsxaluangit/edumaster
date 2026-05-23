@@ -996,7 +996,7 @@ const AssignmentsView: React.FC = () => {
 
   const renderAssignmentForm = () => {
     return (
-      <div className="fixed inset-0 bg-white z-[100] flex flex-col h-screen w-screen overflow-hidden print:static print:h-auto print:w-auto print:overflow-visible print:block">
+      <div className="fixed inset-0 bg-black/70 z-[150] flex items-center justify-center p-4 backdrop-blur-sm print:static print:bg-white print:p-0">
         <style>
           {`
             @media print {
@@ -1006,68 +1006,62 @@ const AssignmentsView: React.FC = () => {
               .no-print { display: none !important; }
               .print-only { display: block !important; }
               input, select { border: none !important; appearance: none; -webkit-appearance: none; padding: 0 !important; background: transparent !important; }
-              /* Hide Notes Column in Print */
               .col-notes { display: none !important; }
-              /* Ensure Subject Name shows fully */
-              /* Ensure Subject Name shows fully */
               .col-subject input { white-space: normal; overflow: visible; }
-              /* Make borders darker for print */
               table, th, td { border: 1px solid #000 !important; border-collapse: collapse !important; }
             }
           `}
         </style>
+        <div className="bg-white w-full max-w-6xl rounded-xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden border border-slate-300 print:shadow-none print:rounded-none print:max-h-none print:h-auto">
 
-        {/* Header */}
-        <div className="bg-blue-600 text-white px-6 py-4 flex justify-between items-center shrink-0 no-print">
-          <div>
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <Calendar size={24} /> Phân công Huấn luyện
-            </h2>
-            <div className="text-blue-100 text-sm mt-1 flex gap-4">
-              <span className="font-bold uppercase">{currentClassName}</span>
-              <span className="opacity-80">|</span>
-              <span>QĐ: {currentDecisionNumber}</span>
+        {/* Header - slate-800 giống Duyệt thi */}
+        <div className="bg-slate-800 text-white px-4 py-3 flex justify-between items-center shrink-0 no-print">
+          <div className="flex items-center gap-3">
+            <div className="p-1.5 bg-slate-700 rounded-md">
+              <Calendar size={18} className="text-blue-400" />
+            </div>
+            <div>
+              <h2 className="text-[15px] font-bold">Phân công Huấn luyện</h2>
+              <p className="text-[12px] text-slate-300 mt-0.5 flex items-center gap-2">
+                <span className="font-mono bg-slate-600 px-1 rounded text-[11px]">{currentDecisionNumber}</span>
+                <span>•</span>
+                <span className="font-semibold">{currentClassName}</span>
+              </p>
             </div>
           </div>
-          <button onClick={() => setIsFormOpen(false)} className="hover:bg-blue-700 p-2 rounded-full transition-colors">
-            <X size={24} />
-          </button>
-        </div>
-
-        {/* Toolbar */}
-        <div className="bg-slate-50 px-6 py-3 border-b border-slate-200 flex justify-between items-center shrink-0 no-print">
-          <div className="text-sm text-slate-500 italic">
-            Điều chỉnh thời gian và giáo viên giảng dạy cho từng môn học.
-          </div>
-          <div className="flex gap-4 items-center">
-            <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-xl px-3 py-1 shadow-sm">
-              <span className="text-[10px] font-bold text-slate-400 uppercase whitespace-nowrap">Ngày bắt đầu:</span>
+          <div className="flex items-center gap-2">
+            {/* Ngày bắt đầu */}
+            <div className="flex items-center gap-1.5 bg-slate-700 border border-slate-600 rounded-md px-2.5 py-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase whitespace-nowrap">Từ ngày:</span>
               <input
                 type="date"
-                className="bg-transparent border-none focus:ring-0 text-sm font-bold text-blue-600 outline-none p-0 w-32"
+                className="bg-transparent border-none focus:ring-0 text-[12px] font-bold text-blue-300 outline-none p-0 w-28"
                 value={autoStartDate}
                 onChange={(e) => setAutoStartDate(e.target.value)}
               />
             </div>
-            <button onClick={handleAutoArrange} className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-all shadow-md flex items-center gap-2">
-              <RefreshCw size={16} /> Tự động sắp xếp
+            <button onClick={handleAutoArrange} className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-[12px] font-semibold flex items-center gap-1.5 transition-colors">
+              <RefreshCw size={13} /> Tự động
             </button>
-            <div className="h-8 w-px bg-slate-300 mx-2"></div>
-            <button onClick={handleResetSchedule} className="px-3 py-2 bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-200 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center gap-2">
-              <RefreshCw size={16} /> Tải lại CTĐT
+            <button onClick={handleResetSchedule} className="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-orange-300 border border-slate-600 rounded-md text-[12px] font-semibold flex items-center gap-1.5 transition-colors">
+              <RefreshCw size={13} /> Tải lại CTĐT
             </button>
-            <div className="h-8 w-px bg-slate-300 mx-2"></div>
-            <button onClick={handleExportExcel} className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold transition-all shadow-sm flex items-center gap-2">
-              <FileSpreadsheet size={16} /> Xuất Excel
+            <div className="w-px h-5 bg-slate-600"></div>
+            <button onClick={handleExportExcel} className="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-md text-[12px] font-semibold flex items-center gap-1.5 transition-colors">
+              <FileSpreadsheet size={13} /> Excel
             </button>
-            <button onClick={handlePrintAttendance} className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-bold transition-all shadow-sm flex items-center gap-2">
-              <ClipboardList size={16} /> In Điểm danh
+            <button onClick={handlePrintAttendance} className="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-purple-300 border border-slate-600 rounded-md text-[12px] font-semibold flex items-center gap-1.5 transition-colors">
+              <ClipboardList size={13} /> Điểm danh
             </button>
-            <button onClick={() => window.print()} className="px-3 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm transition-all">
-              <Printer size={16} /> In
+            <button onClick={() => window.print()} className="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600 rounded-md text-[12px] font-semibold flex items-center gap-1.5 transition-colors">
+              <Printer size={13} /> In
             </button>
-            <button onClick={handleSave} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm transition-all">
-              <Save size={16} /> Lưu bảng
+            <button onClick={handleSave} className="px-2.5 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-md text-[12px] font-semibold flex items-center gap-1.5 shadow-sm shadow-green-900/50 transition-colors">
+              <Save size={13} /> Lưu bảng
+            </button>
+            <div className="w-px h-5 bg-slate-600 mx-0.5"></div>
+            <button onClick={() => setIsFormOpen(false)} className="p-1.5 hover:bg-slate-700 rounded-md transition-colors text-slate-400 hover:text-white">
+              <X size={18} />
             </button>
           </div>
         </div>
@@ -1082,47 +1076,47 @@ const AssignmentsView: React.FC = () => {
         </div>
 
         {/* Table Content */}
-        <div className="flex-1 overflow-auto p-6 bg-slate-100 print:bg-white print:p-0 print:overflow-visible print:h-auto">
-          <div className="bg-white rounded-lg shadow border border-slate-200 overflow-hidden print:shadow-none print:border-none">
+        <div className="flex-1 overflow-auto p-4 bg-slate-50 print:bg-white print:p-0 print:overflow-visible print:h-auto">
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden print:shadow-none print:border-none">
             <table className="w-full text-sm text-left border-collapse">
-              <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-xs sticky top-0 z-10 shadow-sm print:shadow-none print:bg-white print:text-black">
+              <thead className="bg-slate-800 text-slate-300 uppercase font-semibold text-[10px] tracking-wider sticky top-0 z-10 print:bg-white print:text-black">
                 <tr className="print:border-b-2 print:border-black">
-                  <th className="px-4 py-3 w-12 text-center bg-slate-50 print:bg-white border text-center">#</th>
-                  <th className="px-4 py-3 bg-slate-50 print:bg-white border w-auto">Chương trình đào tạo</th>
-                  <th className="px-4 py-3 w-32 bg-slate-50 print:bg-white border text-center">Ngày học</th>
-                  <th className="px-4 py-3 w-24 bg-slate-50 print:bg-white border text-center">Buổi</th>
-                  <th className="px-4 py-3 w-48 bg-slate-50 print:bg-white border">Giáo viên</th>
-                  <th className="px-4 py-3 bg-slate-50 print:bg-white border col-notes no-print">Ghi chú</th>
-                  <th className="px-4 py-3 w-10 bg-slate-50 print:bg-white border no-print"></th>
+                  <th className="px-3 py-2.5 w-10 text-center print:bg-white border">#</th>
+                  <th className="px-3 py-2.5 print:bg-white border w-auto">Chương trình đào tạo</th>
+                  <th className="px-3 py-2.5 w-28 print:bg-white border text-center">Ngày học</th>
+                  <th className="px-3 py-2.5 w-20 print:bg-white border text-center">Buổi</th>
+                  <th className="px-3 py-2.5 w-44 print:bg-white border">Giáo viên</th>
+                  <th className="px-3 py-2.5 print:bg-white border col-notes no-print">Ghi chú</th>
+                  <th className="px-3 py-2.5 w-8 print:bg-white border no-print"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 print:divide-black">
+              <tbody className="divide-y divide-slate-100 text-[13px] print:divide-black">
                 {assignmentRows.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50 transition-colors group print:hover:bg-transparent">
-                    <td className="px-4 py-3 text-center text-slate-400 print:text-black border">{idx + 1}</td>
-                    <td className="px-4 py-3 border col-subject">
+                  <tr key={idx} className="hover:bg-blue-50/40 transition-colors group print:hover:bg-transparent">
+                    <td className="px-3 py-2 text-center text-slate-400 font-medium print:text-black border">{idx + 1}</td>
+                    <td className="px-3 py-2 border col-subject">
                       <input
                         type="text"
-                        className="w-full bg-transparent border-none focus:ring-0 font-medium text-slate-700 p-0 print:hidden"
+                        className="w-full bg-transparent border-none focus:ring-0 font-semibold text-slate-700 p-0 print:hidden text-[13px]"
                         value={row.subjectName}
                         onChange={(e) => updateRow(idx, 'subjectName', e.target.value)}
                         placeholder="Nhập tên môn..."
                       />
                       <div className="hidden print:block whitespace-pre-wrap">{row.subjectName}</div>
                     </td>
-                    <td className="px-4 py-3 border text-center">
+                    <td className="px-3 py-2 border text-center">
                       <input
                         type="date"
-                        className="w-full border border-slate-200 rounded px-2 py-1 text-slate-600 focus:border-blue-500 focus:outline-none text-center print:text-black"
+                        className="w-full border border-slate-200 rounded px-1.5 py-1 text-slate-600 focus:border-blue-500 focus:outline-none text-center text-[12px] print:text-black"
                         value={row.date}
                         onChange={(e) => updateRow(idx, 'date', e.target.value)}
                       />
                       <span className="hidden print:inline">{formatDateVN(row.date)}</span>
                       <style>{`@media print { input[type="date"] { display: none; } }`}</style>
                     </td>
-                    <td className="px-4 py-3 border text-center">
+                    <td className="px-3 py-2 border text-center">
                       <select
-                        className="w-full border border-slate-200 rounded px-2 py-1 text-slate-600 focus:border-blue-500 focus:outline-none print:hidden"
+                        className="w-full border border-slate-200 rounded px-1.5 py-1 text-slate-600 focus:border-blue-500 focus:outline-none text-[12px] print:hidden"
                         value={row.shift}
                         onChange={(e) => updateRow(idx, 'shift', e.target.value as any)}
                       >
@@ -1132,9 +1126,9 @@ const AssignmentsView: React.FC = () => {
                       </select>
                       <span className="hidden print:inline">{row.shift}</span>
                     </td>
-                    <td className="px-4 py-3 border">
+                    <td className="px-3 py-2 border">
                       <select
-                        className="w-full border border-slate-200 rounded px-2 py-1 text-slate-600 focus:border-blue-500 focus:outline-none print:hidden"
+                        className="w-full border border-slate-200 rounded px-1.5 py-1 text-slate-600 focus:border-blue-500 focus:outline-none text-[12px] print:hidden"
                         value={row.teacherId}
                         onChange={(e) => updateRow(idx, 'teacherId', e.target.value)}
                       >
@@ -1192,21 +1186,21 @@ const AssignmentsView: React.FC = () => {
                       </select>
                       <span className="hidden print:inline">{row.teacherName}</span>
                     </td>
-                    <td className="px-4 py-3 border col-notes no-print">
+                    <td className="px-3 py-2 border col-notes no-print">
                       <input
                         type="text"
-                        className="w-full bg-transparent border-none focus:ring-0 text-slate-500 p-0"
+                        className="w-full bg-transparent border-none focus:ring-0 text-slate-500 p-0 text-[12px]"
                         value={row.notes}
                         onChange={(e) => updateRow(idx, 'notes', e.target.value)}
                         placeholder="..."
                       />
                     </td>
-                    <td className="px-4 py-3 text-center border no-print">
+                    <td className="px-2 py-2 text-center border no-print">
                       <button
                         onClick={() => removeRow(idx)}
                         className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
                       >
-                        <UserCheck size={16} className="rotate-45" />
+                        <X size={14} />
                       </button>
                     </td>
                   </tr>
@@ -1222,23 +1216,33 @@ const AssignmentsView: React.FC = () => {
             </table>
           </div>
         </div>
+        </div>
       </div>
     );
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto min-h-screen bg-slate-50">
-      <div className="mb-8 print:hidden flex justify-between items-start">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Phân công Huấn luyện</h1>
-          <p className="text-slate-500">Danh sách các lớp đang hoạt động theo Quyết định.</p>
+    <div className="p-4 max-w-7xl mx-auto min-h-screen bg-slate-50">
+      <div className="mb-5 print:hidden flex items-center gap-4">
+        {/* Left: Icon + Title */}
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="p-2.5 bg-white rounded-xl shadow-sm border border-slate-200">
+            <Calendar size={22} className="text-blue-600" />
+          </div>
+          <div>
+            <h1 className="text-base font-bold text-slate-800 leading-tight">Phân công Huấn luyện</h1>
+            <p className="text-xs text-slate-400">Danh sách các lớp đang hoạt động theo Quyết định.</p>
+          </div>
         </div>
-        <button
-          onClick={handleExportAllAssignments}
-          className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition-all"
-        >
-          <FileSpreadsheet size={20} /> Xuất Excel tổng hợp
-        </button>
+        {/* Right: Buttons */}
+        <div className="flex gap-2 shrink-0 ml-auto">
+          <button
+            onClick={handleExportAllAssignments}
+            className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-lg text-sm font-semibold shadow-sm hover:bg-emerald-700 transition-all"
+          >
+            <FileSpreadsheet size={15} /> Xuất Excel tổng hợp
+          </button>
+        </div>
       </div>
 
       {isFormOpen && renderAssignmentForm()}
