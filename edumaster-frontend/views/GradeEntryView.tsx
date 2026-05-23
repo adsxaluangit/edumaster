@@ -326,7 +326,7 @@ const GradeEntryView: React.FC = () => {
         if (!selectedDecision) return null;
 
         return (
-            <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="fixed inset-0 bg-black/70 z-[150] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                 <div className="bg-white w-full max-w-6xl rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-300">
                     {/* Header */}
                     <div className="bg-slate-800 text-white px-4 py-3 flex justify-between items-center shrink-0">
