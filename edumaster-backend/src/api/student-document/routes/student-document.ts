@@ -16,6 +16,16 @@ export default {
         auth: { scope: ['api::student-document.student-document.findByIdNumber'] }
       }
     },
+    // Custom route: thay thế hoặc tạo mới document (tránh trùng lặp file)
+    {
+      method: 'POST',
+      path: '/student-documents/replace-or-create',
+      handler: 'student-document.replaceOrCreate',
+      config: {
+        policies: [],
+        auth: { scope: ['api::student-document.student-document.replaceOrCreate'] }
+      }
+    },
     // Core CRUD routes
     { method: 'GET',    path: '/student-documents',      handler: 'student-document.find' },
     { method: 'GET',    path: '/student-documents/:id',  handler: 'student-document.findOne' },

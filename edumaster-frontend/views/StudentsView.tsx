@@ -701,7 +701,16 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
             id_number: (studentObj as any)?.idNumber || '' // CCCD — dùng để chia sẻ docs qua nhiều lớp
           };
 
-          const savedDoc = await createCategory(COLLECTIONS.STUDENT_DOCUMENTS, payload);
+          // Gọi API replace-or-create: nếu đã có doc cùng tên + CCCD → cập nhật URL
+          // Tránh tạo file thừa trên ổ đĩa
+          const token = localStorage.getItem('jwt_token') || '';
+          const replaceRes = await fetch('/api/student-documents/replace-or-create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(payload)
+          });
+          const replaceJson = await replaceRes.json();
+          const savedDoc = replaceJson?.data || null;
 
           if (savedDoc) {
             setStudents(prev => prev.map(s => {
