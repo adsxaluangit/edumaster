@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:18-alpine
+    image: postgres:17-alpine
     container_name: edumaster_db
     restart: always
     environment:
@@ -9,10 +9,20 @@ services:
       POSTGRES_DB: ${DATABASE_NAME:-edumaster}
     ports:
       - "5432:5432"
+    command: >
+      postgres
+      -c shared_buffers=2GB
+      -c work_mem=64MB
+      -c maintenance_work_mem=512MB
+      -c effective_cache_size=4GB
+      -c max_connections=200
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=64MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
     volumes:
       - edumaster_db_data:/var/lib/postgresql/data
-      - ./edumaster-backend/database/backup_07042026.sql:/dump.backup:ro
-      - ./edumaster-backend/database/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
     networks:
       - edumaster_net
 
@@ -60,6 +70,26 @@ services:
       - "81:80"
     depends_on:
       - backend
+    networks:
+      - edumaster_net
+
+  backup:
+    image: postgres:17-alpine
+    container_name: edumaster_backup
+    restart: always
+    environment:
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${DATABASE_NAME:-edumaster}
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-postgres}
+      PGPASSWORD: ${DATABASE_PASSWORD:-123456}
+    volumes:
+      - ./scripts/backup.sh:/backup.sh:ro
+      - ./scripts/entrypoint-backup.sh:/entrypoint-backup.sh:ro
+      - ./edumaster-backend/database/auto-backups:/backups
+    entrypoint: ["sh", "/entrypoint-backup.sh"]
+    depends_on:
+      - db
     networks:
       - edumaster_net
 

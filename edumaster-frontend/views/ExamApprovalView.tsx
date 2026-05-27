@@ -225,9 +225,11 @@ const ExamApprovalView: React.FC = () => {
                 gender: s.gender || '',
                 photo: s.photo || s.attributes?.photo || '' // Check both levels just in case
             })).sort((a, b) => {
-                const nameA = a.fullName.split(' ').pop() || '';
-                const nameB = b.fullName.split(' ').pop() || '';
-                return nameA.localeCompare(nameB);
+                const lastA = (a.fullName || '').trim().split(/\s+/).pop() || '';
+                const lastB = (b.fullName || '').trim().split(/\s+/).pop() || '';
+                const cmp = lastA.localeCompare(lastB, 'vi', { sensitivity: 'base' });
+                if (cmp !== 0) return cmp;
+                return (a.fullName || '').localeCompare(b.fullName || '', 'vi', { sensitivity: 'base' });
             });
             setDecisionStudents(mappedStudents);
 
@@ -515,7 +517,15 @@ const ExamApprovalView: React.FC = () => {
         const currentSubjectName = currentSub?.name || '';
         const subKey = String(currentSub?.strapiId || selectedSubjectId);
         const subApprovals = approvals[subKey] || {};
-        const approvedList = decisionStudents.filter(s => subApprovals[s.studentCode]?.theoryApproved);
+        const approvedList = decisionStudents
+            .filter(s => subApprovals[s.studentCode]?.theoryApproved)
+            .sort((a, b) => {
+                const lastA = (a.fullName || '').trim().split(/\s+/).pop() || '';
+                const lastB = (b.fullName || '').trim().split(/\s+/).pop() || '';
+                const cmp = lastA.localeCompare(lastB, 'vi', { sensitivity: 'base' });
+                if (cmp !== 0) return cmp;
+                return (a.fullName || '').localeCompare(b.fullName || '', 'vi', { sensitivity: 'base' });
+            });
 
         const classStr = `LỚP: ${selectedDecision?.classCode || ''} ${selectedDecision?.trainingCourse ? `- ${selectedDecision.trainingCourse}` : ''}`;
 

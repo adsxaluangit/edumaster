@@ -7,9 +7,14 @@ const strapiRequest = async (endpoint: string, options: RequestInit = {}) => {
     try {
         const token = localStorage.getItem('jwt_token');
         const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
             ...((options.headers as Record<string, string>) || {}),
         };
+        
+        // Add default Content-Type only if not FormData
+        if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+             headers['Content-Type'] = 'application/json';
+        }
+
 
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
@@ -186,6 +191,49 @@ export const fetchCategory = async (collectionName: string) => {
     return normalizeStrapiList(json);
 };
 
+export const fetchCategoryPaginated = async (collectionName: string, page: number = 1, pageSize: number = 50, filters: string = '', customParams: string = 'populate=*') => {
+    let endpoint = `/${collectionName}?${customParams}&pagination[page]=${page}&pagination[pageSize]=${pageSize}&publicationState=preview`;
+    if (filters) {
+        endpoint += `&${filters}`;
+    }
+
+    const json = await strapiRequest(endpoint);
+    return {
+        data: normalizeStrapiList(json),
+        meta: json?.meta || { pagination: { page: 1, pageSize: 50, pageCount: 1, total: 0 } }
+    };
+};
+
+// Fetch all pages of a collection in parallel — use for small-to-medium collections needing full data
+// Uses large page size to minimize round trips
+export const fetchCategoryAll = async (collectionName: string, customParams: string = 'populate=*') => {
+    // First request: get total count
+    const firstEndpoint = `/${collectionName}?${customParams}&pagination[page]=1&pagination[pageSize]=200&publicationState=preview`;
+    const firstJson = await strapiRequest(firstEndpoint);
+    const total = firstJson?.meta?.pagination?.total || 0;
+    const pageSize = 200;
+    const pageCount = Math.ceil(total / pageSize);
+
+    // Collect first page result
+    const firstData = normalizeStrapiList(firstJson);
+
+    if (pageCount <= 1) return firstData;
+
+    // Fetch remaining pages in parallel
+    const remainingRequests = [];
+    for (let page = 2; page <= pageCount; page++) {
+        remainingRequests.push(
+            strapiRequest(`/${collectionName}?${customParams}&pagination[page]=${page}&pagination[pageSize]=${pageSize}&publicationState=preview`)
+        );
+    }
+    const remainingResults = await Promise.all(remainingRequests);
+    const allData = [
+        ...firstData,
+        ...remainingResults.flatMap(json => normalizeStrapiList(json))
+    ];
+    return allData;
+};
+
 export const fetchItem = async (collectionName: string, id: string | number) => {
     const endpoint = `/${collectionName}/${id}?populate=*`;
     const json = await strapiRequest(endpoint);
@@ -243,6 +291,45 @@ export const deleteCategory = async (collectionName: string, id: string) => {
         method: 'DELETE',
     });
     return normalizeStrapiItem(json);
+};
+
+export const uploadFile = async (base64Data: string, filename: string) => {
+    try {
+        // Convert base64 to Blob
+        const res = await fetch(base64Data);
+        const blob = await res.blob();
+        
+        const formData = new FormData();
+        formData.append('files', blob, filename);
+        
+        const json = await strapiRequest('/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        return json; // Array of uploaded files info [{id, url, ...}]
+    } catch (e) {
+        console.error("Upload file failed", e);
+        return null;
+    }
+};
+
+// --- Duplicate Check ---
+// Ki\u1ec3m tra h\u1ecdc vi\u00ean c\u00f3 \u0111\u00e3 \u0111\u0103ng k\u00fd l\u1edbp n\u00e0y ch\u01b0a d\u1ef1a v\u00e0o id_number + class documentId
+export const checkDuplicateStudent = async (
+    idNumber: string,
+    classDocumentId: string,
+    excludeStudentId?: string
+): Promise<{ exists: boolean; count: number; students: { id: string; fullName: string; idNumber: string; className: string }[] }> => {
+    try {
+        let url = `/students/check-duplicate?id_number=${encodeURIComponent(idNumber)}&class_id=${encodeURIComponent(classDocumentId)}`;
+        if (excludeStudentId) url += `&exclude_student_id=${encodeURIComponent(excludeStudentId)}`;
+        const res = await strapiRequest(url);
+        return res || { exists: false, count: 0, students: [] };
+    } catch (e) {
+        console.error('[checkDuplicateStudent]', e);
+        return { exists: false, count: 0, students: [] };
+    }
 };
 
 // Mapping for collection names
