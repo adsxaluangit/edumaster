@@ -355,11 +355,40 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       });
       // Clear warning when user changes CCCD
       setDuplicateWarning(null);
+      // Xóa ảnh cũ khi CCCD thay đổi (để tránh hiển thị ảnh sai người)
+      if (!editingId) setStudentPhoto(null);
+    }
+  };
+
+  // Tự động lấy ảnh 3x4 mới nhất theo CCCD khi nhập form mới
+  // → Học viên đăng ký lớp mới không cần upload lại ảnh
+  // → Record cũ / quyết định cũ KHÔNG bị ảnh hưởng
+  const fetchLatestPhotoByIdNumber = async (idNumber: string) => {
+    if (!idNumber || idNumber.length < 9 || editingId) return; // Chỉ áp dụng khi tạo mới
+    if (studentPhoto) return; // Đã có ảnh (từ prefilledStudent) thì giữ nguyên
+    try {
+      const token = localStorage.getItem('jwt_token') || '';
+      const res = await fetch(
+        `/api/students?filters[id_number][$eq]=${idNumber}&fields[0]=photo&sort=createdAt:desc&pagination[limit]=1&publicationState=preview`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) return;
+      const json = await res.json();
+      const latestPhoto = json?.data?.[0]?.photo || json?.data?.[0]?.attributes?.photo;
+      if (latestPhoto) {
+        setStudentPhoto(latestPhoto); // Điền ảnh gần nhất vào form
+      }
+    } catch (_) {
+      // Bỏ qua lỗi — không bắt buộc phải có ảnh
     }
   };
 
   // Real-time check on CCCD blur
   const handleIdNumberBlur = () => {
+    // Tự động load ảnh gần nhất khi CCCD đủ 12 số và đang tạo mới
+    if (formData.idNumber && formData.idNumber.length === 12 && !editingId) {
+      fetchLatestPhotoByIdNumber(formData.idNumber);
+    }
     if (formData.idNumber && formData.classId) {
       // classId in formData = numeric strapiId OR documentId from existing student
       // Find class by matching either strapiId or documentId
