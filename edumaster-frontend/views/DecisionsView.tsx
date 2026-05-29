@@ -369,7 +369,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   const loadDecisions = async () => {
     // We need deep populate to get students' documents and photo within the decision
     // Note: Using explicit relation population (true) instead of * to avoid validation errors with deep nested relations
-    const data = await fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?sort[0]=signed_date:desc&sort[1]=id:desc&populate[school_class]=true&populate[related_decision]=true&populate[students][populate][documents][fields][0]=name&populate[students][populate][documents][fields][1]=url&populate[students][populate][documents][fields][2]=type&populate[students][fields][0]=full_name&populate[students][fields][1]=dob&populate[students][fields][2]=gender&populate[students][fields][3]=card_number&populate[students][fields][4]=id_number&populate[students][fields][5]=student_code&populate[students][fields][6]=pob&populate[students][fields][7]=photo&populate[students][fields][8]=address`);
+    const data = await fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?sort[0]=signed_date:desc&sort[1]=id:desc&populate[school_class]=true&populate[related_decision]=true&populate[students][populate][documents][fields][0]=name&populate[students][populate][documents][fields][1]=url&populate[students][populate][documents][fields][2]=type&populate[students][fields][0]=full_name&populate[students][fields][1]=dob&populate[students][fields][2]=gender&populate[students][fields][3]=card_number&populate[students][fields][4]=id_number&populate[students][fields][5]=student_code&populate[students][fields][6]=pob&populate[students][fields][7]=photo&populate[students][fields][8]=address&populate[students][fields][9]=notes`);
     if (data) {
       const mapped = data.map((d: any, index: number) => {
         const classData = d.school_class?.data || d.school_class;
@@ -402,7 +402,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
               address: item.address || '',
               cardNumber: item.card_number || item.id_number || '',
               years: '',
-              notes: '',
+              notes: item.notes || '',
               documents: (Array.isArray(item.documents) ? item.documents : item.documents?.data || []).map((doc: any) => ({
                 id: doc.documentId || doc.id,
                 name: doc.attributes?.name || doc.name,
@@ -1059,7 +1059,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
             card_number: editingStudentData.cardNumber,
             id_number: editingStudentData.cardNumber,
             pob: editingStudentData.hometown,
-            photo: finalPhotoUrl || null
+            photo: finalPhotoUrl || null,
+            notes: editingStudentData.notes || ''
           });
           
           // Local sync
@@ -2951,6 +2952,16 @@ có ảnh</span>
                 value={editingStudentData.hometown}
                 onChange={e => setEditingStudentData({ ...editingStudentData, hometown: e.target.value })}
                 className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 uppercase">Ghi chú:</label>
+              <textarea
+                rows={3}
+                placeholder="Nhập ghi chú cho học viên (nếu có)..."
+                value={editingStudentData.notes || ''}
+                onChange={e => setEditingStudentData({ ...editingStudentData, notes: e.target.value })}
+                className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               />
             </div>
           </div>
