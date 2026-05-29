@@ -58,10 +58,16 @@ export default factories.createCoreController('api::student.student', ({ strapi 
   // Returns paginated students NOT in any OPENING or RECOGNITION decision
   async findUnassigned(ctx) {
     try {
-      const { page = 1, pageSize = 50, filters = {}, populate = '*' } = ctx.query;
-      const pageNum = parseInt(page as string, 10);
-      const limit = parseInt(pageSize as string, 10);
-      const offset = (pageNum - 1) * limit;
+      // Koa/Strapi parses nested query strings like ?pagination[page]=2&pagination[pageSize]=50
+      // into ctx.query.pagination = { page: '2', pageSize: '50' }
+      // NOT into ctx.query.page — so we must read from the nested object.
+      const queryAny = ctx.query as any;
+      const paginationParam = queryAny.pagination || {};
+      const pageNum = parseInt(paginationParam.page || queryAny.page || '1', 10);
+      const limit   = parseInt(paginationParam.pageSize || queryAny.pageSize || '50', 10);
+      const offset  = (pageNum - 1) * limit;
+      const filters = queryAny.filters || {};
+      const populate = queryAny.populate || '*';
 
       const knex = strapi.db.connection;
       
