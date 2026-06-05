@@ -156,9 +156,9 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
         const checkExisting = async (cccd: string) => {
             setIsCheckingId(true);
             try {
-                const oneYearAgo = new Date();
-                oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-                const filters = `filters[id_number][$eq]=${cccd}&filters[createdAt][$gte]=${oneYearAgo.toISOString()}&sort=createdAt:desc`;
+                const fiveYearsAgo = new Date();
+                fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+                const filters = `filters[id_number][$eq]=${cccd}&filters[createdAt][$gte]=${fiveYearsAgo.toISOString()}&sort=createdAt:desc`;
                 // customParams to populate documents
                 const endpoint = `${COLLECTIONS.STUDENTS}?populate=*&pagination[pageSize]=1&${filters}`;
                 const data = await fetchCategory(endpoint);
