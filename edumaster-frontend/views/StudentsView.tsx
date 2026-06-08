@@ -364,24 +364,31 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
     }
   };
 
-  // Tự động lấy ảnh 3x4 Mới nhất + file CCCD đính kèm theo CCCD khi nhập form mới
-  // → Học viên đăng ký lớp mới không cần upload lại ảnh lẫn hồ sơ
-  // → Record cũ / quyết định cũ KHÔNG bị ảnh hưởng
-  const fetchLatestPhotoByIdNumber = async (idNumber: string) => {
-    if (!idNumber || idNumber.length < 9 || editingId) return; // Chỉ áp dụng khi tạo mới
-    if (studentPhoto) return; // Đã có ảnh (từ prefilledStudent) thì giữ nguyên
+  // Hàm lõi: lấy ảnh 3x4 mới nhất + CCCD mặt trước/sau theo số CCCD
+  // Dùng chung cho cả tạo mới và edit (khi record thiếu ảnh)
+  const fetchPhotoAndDocsByIdNumber = async (idNumber: string, currentPhoto: string | null) => {
+    if (!idNumber || idNumber.length < 9) return;
     try {
       const token = localStorage.getItem('jwt_token') || '';
 
-      // 1. Lấy ảnh 3x4 gần nhất
-      const photoRes = await fetch(
-        `/api/students?filters[id_number][$eq]=${idNumber}&fields[0]=photo&sort=createdAt:desc&pagination[limit]=1&publicationState=preview`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (photoRes.ok) {
-        const json = await photoRes.json();
-        const latestPhoto = json?.data?.[0]?.photo || json?.data?.[0]?.attributes?.photo;
-        if (latestPhoto) setStudentPhoto(latestPhoto);
+      // 1. Lấy ảnh 3x4 mới nhất theo CCCD (chỉ nếu chưa có ảnh)
+      if (!currentPhoto) {
+        // Chỉ tìm ảnh từ records tạo trong 5 năm gần nhất
+        const fiveYearsAgo = new Date();
+        fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+        const photoRes = await fetch(
+          `/api/students?filters[id_number][$eq]=${idNumber}&filters[createdAt][$gte]=${fiveYearsAgo.toISOString()}&fields[0]=photo&sort=createdAt:desc&pagination[limit]=20&publicationState=preview`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (photoRes.ok) {
+          const json = await photoRes.json();
+          // Lấy ảnh có giá trị (khác null/rỗng) đầu tiên trong tất cả records cùng CCCD
+          const allRecords: any[] = json?.data || [];
+          const latestPhoto = allRecords
+            .map((r: any) => r.photo || r.attributes?.photo)
+            .find((p: any) => !!p) || null;
+          if (latestPhoto) setStudentPhoto(latestPhoto);
+        }
       }
 
       // 2. Lấy CCCD mặt trước/sau gần nhất
@@ -399,6 +406,15 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
     } catch (_) {
       // Bỏ qua lỗi — không bắt buộc phải có
     }
+  };
+
+  // Tự động lấy ảnh 3x4 Mới nhất + file CCCD đính kèm theo CCCD khi nhập form mới
+  // → Học viên đăng ký lớp mới không cần upload lại ảnh lẫn hồ sơ
+  // → Record cũ / quyết định cũ KHÔNG bị ảnh hưởng
+  const fetchLatestPhotoByIdNumber = async (idNumber: string) => {
+    if (!idNumber || idNumber.length < 9 || editingId) return; // Chỉ áp dụng khi tạo mới
+    if (studentPhoto) return; // Đã có ảnh (từ prefilledStudent) thì giữ nguyên
+    await fetchPhotoAndDocsByIdNumber(idNumber, studentPhoto);
   };
 
   // Real-time check on CCCD blur
@@ -498,6 +514,11 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
     });
     setStudentPhoto(student.photo || null);
     setIsFormOpen(true);
+
+    // Nếu record thiếu ảnh → tự động lấy ảnh mới nhất từ CCCD (các lớp học khác cùng người)
+    if (!student.photo && student.idNumber && student.idNumber.length >= 9) {
+      fetchPhotoAndDocsByIdNumber(student.idNumber, null);
+    }
   };
 
   const handleDobChange = (dob: string) => {
