@@ -2829,7 +2829,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   const renderEditStudentModal = () => {
     if (!editingStudentData) return null;
     return (
-      <div className="fixed inset-0 bg-black/60 z-[130] flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm">
         <div className="bg-white w-full max-w-xl rounded-xl shadow-2xl overflow-hidden border border-slate-300">
           <div className="bg-blue-700 text-white px-6 py-3 flex justify-between items-center">
             <h3 className="text-[14px] font-bold uppercase tracking-tight">Sửa thông tin học viên trong QĐ</h3>
@@ -3016,7 +3016,7 @@ có ảnh</span>
   };
 
   const renderAddStudentModal = () => (
-    <div className="fixed inset-0 bg-black/70 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 bg-black/70 z-[200] flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white w-full max-w-5xl rounded-xl shadow-2xl overflow-hidden border border-slate-300 flex flex-col max-h-[90vh]">
         <div className="bg-slate-800 text-white px-6 py-4 flex justify-between items-center shrink-0">
           <h2 className="text-lg font-bold">Chọn học viên thêm vào quyết định</h2>
