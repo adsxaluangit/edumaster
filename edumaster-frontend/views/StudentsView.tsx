@@ -1210,6 +1210,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                       <option value="Đồng Tháp">Đồng Tháp</option>
                       <option value="Cà Mau">Cà Mau</option>
                       <option value="An Giang">An Giang</option>
+                      <option value="Nơi khác">Nơi khác</option>
                     </select>
                   </div>
 
