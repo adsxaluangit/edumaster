@@ -151,7 +151,7 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
         loadClasses();
     }, []);
 
-    // Check for existing student when 12 digits ID is typed
+    // Check for existing student when 12 digits ID is typed — also auto-fills form
     useEffect(() => {
         const checkExisting = async (cccd: string) => {
             setIsCheckingId(true);
@@ -159,22 +159,48 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                 const fiveYearsAgo = new Date();
                 fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
                 const filters = `filters[id_number][$eq]=${cccd}&filters[createdAt][$gte]=${fiveYearsAgo.toISOString()}&sort=createdAt:desc`;
-                // customParams to populate documents
                 const endpoint = `${COLLECTIONS.STUDENTS}?populate=*&pagination[pageSize]=1&${filters}`;
                 const data = await fetchCategory(endpoint);
-                
+
                 if (data && data.length > 0) {
-                    const latestStudent = data[0];
-                    if (latestStudent.photo || (latestStudent.documents && latestStudent.documents.length > 0)) {
-                        setExistingData(latestStudent);
-                    } else {
-                        setExistingData(null);
-                    }
+                    const s = data[0];
+                    // Auto-fill student info
+                    setFormData(prev => ({
+                        ...prev,
+                        fullName: s.full_name || s.fullName || prev.fullName,
+                        dob: s.dob ? (() => {
+                            // Convert ISO date to DD,MM,YYYY parts
+                            const d = new Date(s.dob);
+                            if (isNaN(d.getTime())) return s.dob;
+                            const day = String(d.getDate()).padStart(2, '0');
+                            const month = String(d.getMonth() + 1).padStart(2, '0');
+                            const year = String(d.getFullYear());
+                            return `${day},${month},${year}`;
+                        })() : (s.dob_raw || prev.dob),
+                        pob: s.pob || prev.pob,
+                        ethnicity: s.ethnicity || prev.ethnicity,
+                        phone: s.phone || prev.phone,
+                        gender: s.gender || prev.gender,
+                        address: s.address || prev.address,
+                        email: s.email || prev.email,
+                        parentName: s.parentName || prev.parentName,
+                        parentPhone: s.parentPhone || prev.parentPhone,
+                        company: s.company || prev.company,
+                    }));
+                    if (s.photo && !studentPhoto) setStudentPhoto(s.photo);
+                    // Auto-fill CCCD images from existing documents
+                    const docs = s.documents || [];
+                    const frontDoc = docs.find((d: any) => d.name === 'CCCD Mặt trước');
+                    const backDoc  = docs.find((d: any) => d.name === 'CCCD Mặt sau');
+                    if (frontDoc?.url) setCccdFront(frontDoc.url);
+                    if (backDoc?.url)  setCccdBack(backDoc.url);
+                    setExistingData(s);
                 } else {
                     setExistingData(null);
                 }
             } catch (err) {
                 console.error("Check existing failed", err);
+                setExistingData(null);
             } finally {
                 setIsCheckingId(false);
             }
@@ -197,12 +223,25 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
             alert('Vui lòng điền đầy đủ các trường bắt buộc (Họ tên, SĐT, CCCD, Nơi sinh)!');
             return;
         }
-        if (selectedClasses.length === 0) {
-            alert('Vui lòng chọn ít nhất 1 lớp học muốn đăng ký!');
-            return;
-        }
         if (formData.idNumber.length !== 12) {
             alert('Vui lòng nhập chính xác 12 số CCCD/CMND!');
+            return;
+        }
+        // Validate required: dob
+        const dobParts = formData.dob.split(',');
+        if (!dobParts[0] || !dobParts[1] || !dobParts[2]) {
+            alert('Vui lòng chọn đầy đủ Ngày tháng năm sinh!');
+            return;
+        }
+        // Validate required: CCCD images
+        const hasCccdFront = cccdFront || existingData?.documents?.find((d: any) => d.name === 'CCCD Mặt trước')?.url;
+        const hasCccdBack  = cccdBack  || existingData?.documents?.find((d: any) => d.name === 'CCCD Mặt sau')?.url;
+        if (!hasCccdFront || !hasCccdBack) {
+            alert('Vui lòng tải lên ảnh CCCD mặt trước và mặt sau!');
+            return;
+        }
+        if (selectedClasses.length === 0) {
+            alert('Vui lòng chọn ít nhất 1 lớp học muốn đăng ký!');
             return;
         }
         // Block if any selected class is already duplicate
@@ -389,6 +428,34 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                         <div className="grid grid-cols-1 gap-8">
                             {/* Form Fields — full width vì đã ẩn cột ảnh */}
                             <div className="col-span-1 space-y-3">
+
+                                {/* CMND/CCCD — đặt lên đầu tiên */}
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">CMND/CCCD <span className="text-red-500">*</span></label>
+                                    <input
+                                        type="text"
+                                        required
+                                        maxLength={12}
+                                        value={formData.idNumber}
+                                        onChange={e => {
+                                            const val = e.target.value.replace(/\D/g, '');
+                                            if (val.length <= 12) setFormData({ ...formData, idNumber: val });
+                                        }}
+                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400"
+                                        placeholder="Nhập 12 số CCCD"
+                                    />
+                                    {isCheckingId && <p className="text-xs text-blue-500 mt-1 animate-pulse">⏳ Đang kiểm tra dữ liệu thí sinh...</p>}
+                                    {!isCheckingId && formData.idNumber.length === 12 && existingData && (
+                                        <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-700 flex items-start gap-1">
+                                            <CheckCircle size={14} className="mt-0.5 shrink-0" />
+                                            <span>Đã tìm thấy thí sinh — thông tin đã được điền tự động. Bạn có thể chỉnh sửa nếu cần.</span>
+                                        </div>
+                                    )}
+                                    {!isCheckingId && formData.idNumber.length === 12 && !existingData && (
+                                        <p className="text-xs text-slate-400 mt-1">Không tìm thấy thí sinh có CCCD này. Vui lòng điền thông tin bên dưới.</p>
+                                    )}
+                                </div>
+
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-1">Họ và tên thí sinh <span className="text-red-500">*</span></label>
                                     <input
@@ -402,7 +469,7 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Ngày sinh</label>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Ngày sinh <span className="text-red-500">*</span></label>
                                     <div className="grid grid-cols-3 gap-2">
                                         <div className="relative">
                                             <select
@@ -480,39 +547,15 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 mb-1">Số điện thoại <span className="text-red-500">*</span></label>
-                                        <input
-                                            type="tel"
-                                            required
-                                            value={formData.phone}
-                                            onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                                            className="w-full px-4 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 mb-1">CMND/CCCD <span className="text-red-500">*</span></label>
-                                        <input
-                                            type="text"
-                                            required
-                                            maxLength={12}
-                                            value={formData.idNumber}
-                                            onChange={e => {
-                                                const val = e.target.value.replace(/\D/g, '');
-                                                if (val.length <= 12) setFormData({ ...formData, idNumber: val });
-                                            }}
-                                            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400"
-                                            placeholder="Nhập 12 số CCCD"
-                                        />
-                                        {isCheckingId && <p className="text-xs text-blue-500 mt-1">Đang kiểm tra dữ liệu...</p>}
-                                        {existingData && !isCheckingId && (
-                                            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-700 flex items-start gap-1">
-                                                <CheckCircle size={14} className="mt-0.5 shrink-0" />
-                                                <span>Hệ thống ghi nhận bạn đã có sẵn Ảnh thẻ & CCCD hợp lệ. Bạn không cần tải lại ảnh nếu không có thay đổi.</span>
-                                            </div>
-                                        )}
-                                    </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Số điện thoại <span className="text-red-500">*</span></label>
+                                    <input
+                                        type="tel"
+                                        required
+                                        value={formData.phone}
+                                        onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                                        className="w-full px-4 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                    />
                                 </div>
 
 
@@ -656,7 +699,7 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
 
                                 <div className="mb-6 grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">CCCD Mặt trước</label>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">CCCD Mặt trước <span className="text-red-500">*</span></label>
                                         <div className="border-2 border-dashed border-slate-300 rounded-lg p-2 text-center h-[120px] flex flex-col items-center justify-center relative hover:bg-slate-50 cursor-pointer overflow-hidden group">
                                             {cccdFront ? (
                                                 <img src={cccdFront} alt="CCCD Front" className="absolute inset-0 w-full h-full object-cover" />
@@ -681,7 +724,7 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">CCCD Mặt sau</label>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">CCCD Mặt sau <span className="text-red-500">*</span></label>
                                         <div className="border-2 border-dashed border-slate-300 rounded-lg p-2 text-center h-[120px] flex flex-col items-center justify-center relative hover:bg-slate-50 cursor-pointer overflow-hidden group">
                                             {cccdBack ? (
                                                 <img src={cccdBack} alt="CCCD Back" className="absolute inset-0 w-full h-full object-cover" />
