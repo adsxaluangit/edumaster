@@ -7,6 +7,7 @@ import ExcelJS from 'exceljs';
 import { fetchCategory, fetchCategoryPaginated, createCategory, updateCategory, deleteCategory, COLLECTIONS, uploadFile, checkDuplicateStudent } from '../services/api';
 import { formatDate, parseToISO } from '../utils/dateUtils';
 import { downloadFile } from '../utils/fileUtils';
+import { PROVINCES_LIST } from '../constants';
 
 
 
@@ -57,9 +58,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   const [prefilledStudentDocs, setPrefilledStudentDocs] = useState<any[]>([]);
 
   // --- Docs fetch theo CCCD khi nhập form mới ---
-  const [prefillDocs, setPrefillDocs] = useState<{ front: string | null, back: string | null }>({ front: null, back: null });
-
-  const [isCustomPob, setIsCustomPob] = useState(false);
+  const [prefillDocs, setPrefillDocs] = useState<{front: string|null, back: string|null}>({front: null, back: null});
 
   const [formData, setFormData] = useState({
     studentCode: '',
@@ -136,15 +135,15 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       else setNations([]);
 
       const customParams = `sort=createdAt:desc&populate[school_class]=true&populate[documents][fields][0]=name&populate[documents][fields][1]=url&populate[documents][fields][2]=type&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=address&fields[9]=phone&fields[10]=is_approved&fields[11]=group&fields[12]=class_code&fields[13]=company&fields[14]=ethnicity&fields[15]=nationality&fields[16]=photo`;
-
+      
       let filters = '';
       if (searchTermServer) {
-        filters = `filters[$or][0][full_name][$containsi]=${encodeURIComponent(searchTermServer)}&filters[$or][1][id_number][$contains]=${encodeURIComponent(searchTermServer)}`;
+         filters = `filters[$or][0][full_name][$containsi]=${encodeURIComponent(searchTermServer)}&filters[$or][1][id_number][$contains]=${encodeURIComponent(searchTermServer)}`;
       }
       if (selectedClassFilter) {
-        // Filter through the school_class relation using class name
-        // (most students have empty 'group' text field; data is in school_class relation)
-        filters += (filters ? '&' : '') + `filters[school_class][name][$eq]=${encodeURIComponent(selectedClassFilter)}`;
+         // Filter through the school_class relation using class name
+         // (most students have empty 'group' text field; data is in school_class relation)
+         filters += (filters ? '&' : '') + `filters[school_class][name][$eq]=${encodeURIComponent(selectedClassFilter)}`;
       }
 
       // Always use unassigned endpoint to exclude students already in decisions (handled by backend)
@@ -201,15 +200,6 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       if (onClearPrefill) onClearPrefill();
     }
   }, [prefilledStudent]);
-
-  useEffect(() => {
-    if (isFormOpen && formData.pob) {
-      const predefined = ["Hà Nội", "Huế", "Lai Châu", "Điện Biên", "Sơn La", "Lạng Sơn", "Quảng Ninh", "Thanh Hoá", "Nghệ An", "Hà Tĩnh", "Cao Bằng", "Tuyên Quang", "Lào Cai", "Thái Nguyên", "Phú Thọ", "Bắc Ninh", "Hưng Yên", "Hải Phòng", "Ninh Bình", "Quảng Trị", "Đà Nẵng", "Quảng Ngãi", "Gia Lai", "Khánh Hòa", "Lâm Đồng", "Đắk Lắk", "TP. Hồ Chí Minh", "Đồng Nai", "Tây Ninh", "Cần Thơ", "Vĩnh Long", "Đồng Tháp", "Cà Mau", "An Giang"];
-      setIsCustomPob(!predefined.includes(formData.pob));
-    } else if (!isFormOpen) {
-      setIsCustomPob(false);
-    }
-  }, [isFormOpen, editingId, prefilledStudent]);
 
   const [loading, setLoading] = useState(false);
 
@@ -298,7 +288,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
 
       const today = new Date();
-      const dateStr = `${String(today.getDate()).padStart(2, '0')}${String(today.getMonth() + 1).padStart(2, '0')}${today.getFullYear()}`;
+      const dateStr = `${String(today.getDate()).padStart(2,'0')}${String(today.getMonth()+1).padStart(2,'0')}${today.getFullYear()}`;
       const fileName = selectedClassFilter
         ? `DanhSach_${selectedClassFilter.replace(/[^a-zA-Z0-9]/g, '_')}_${dateStr}.xlsx`
         : `DanhSach_HocVien_${dateStr}.xlsx`;
@@ -411,7 +401,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         const docsJson = await docsRes.json();
         const docs: any[] = docsJson?.data || [];
         const front = docs.find((d: any) => d.name === 'CCCD Mặt trước')?.url || null;
-        const back = docs.find((d: any) => d.name === 'CCCD Mặt sau')?.url || null;
+        const back  = docs.find((d: any) => d.name === 'CCCD Mặt sau')?.url  || null;
         setPrefillDocs({ front, back });
       }
     } catch (_) {
@@ -554,7 +544,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
   const handleSave = async () => {
     if (!formData.fullName || !formData.group || !formData.idNumber || !formData.dob || !formData.address) {
-      alert('Vui lòng nhập đầy đủ: Họ tên, Ngày sinh, Địa chỉ, Lớp học và Số CMND/CCCD!');
+      alert('Vui lòng nhập đầy đủ: Họ tên, Ngày sinh, Lớp học, Số CMND/CCCD và Địa chỉ thường trú!');
       return;
     }
 
@@ -692,12 +682,12 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
     const saveToApi = async () => {
       try {
         let finalPhotoUrl = studentPhoto;
-
+        
         // If photo is a newly captured Base64 string, upload it to Server Filesystem
         if (studentPhoto && studentPhoto.startsWith('data:image/')) {
           const uploadedInfo = await uploadFile(studentPhoto, `avatar_${formData.studentCode || Date.now()}.jpg`);
           if (uploadedInfo && uploadedInfo.length > 0) {
-            finalPhotoUrl = uploadedInfo[0].url;
+            finalPhotoUrl = uploadedInfo[0].url; 
           }
         }
 
@@ -762,13 +752,13 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       reader.onload = async () => {
         try {
           const studentObj = students.find(s => s.id === studentId);
-          let finalDocUrl = reader.result as string;
-
+          let finalDocUrl = reader.result as string; 
+          
           if (finalDocUrl.startsWith('data:image/')) {
-            const uploadedInfo = await uploadFile(finalDocUrl, `doc_${studentObj?.studentCode || Date.now()}_${file.name}`);
-            if (uploadedInfo && uploadedInfo.length > 0) {
-              finalDocUrl = uploadedInfo[0].url;
-            }
+             const uploadedInfo = await uploadFile(finalDocUrl, `doc_${studentObj?.studentCode || Date.now()}_${file.name}`);
+             if (uploadedInfo && uploadedInfo.length > 0) {
+                 finalDocUrl = uploadedInfo[0].url;
+             }
           }
 
           const payload = {
@@ -1055,10 +1045,11 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
             onClick={handleSave}
             disabled={!!duplicateWarning}
             title={duplicateWarning ? 'Không thể lưu khi có học viên trùng' : ''}
-            className={`px-5 py-1 rounded border text-[12px] font-bold shadow-sm flex items-center gap-1.5 transition-all ${duplicateWarning
+            className={`px-5 py-1 rounded border text-[12px] font-bold shadow-sm flex items-center gap-1.5 transition-all ${
+              duplicateWarning
                 ? 'bg-slate-300 text-slate-500 border-slate-300 cursor-not-allowed'
                 : 'bg-[#54a0ff] text-white border-[#2e86de] hover:brightness-105'
-              }`}
+            }`}
           >
             <Save size={14} /> Lưu
           </button>
@@ -1178,69 +1169,27 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 col-span-2">
-                    <label className="w-32 flex-shrink-0 text-left pl-4 text-[12px] text-slate-600 font-medium whitespace-nowrap">Nơi sinh:</label>
-                    <div className="flex-1 flex flex-col gap-1">
+                  <div className={`flex gap-2 col-span-2 ${(formData.pob !== '' && !PROVINCES_LIST.includes(formData.pob)) ? 'items-start' : 'items-center'}`}>
+                    <label className={`w-32 flex-shrink-0 text-left pl-4 text-[12px] text-slate-600 font-medium whitespace-nowrap ${(formData.pob !== '' && !PROVINCES_LIST.includes(formData.pob)) ? 'pt-1.5' : ''}`}>Nơi sinh:</label>
+                    <div className="flex-1 flex flex-col gap-1.5">
                       <select
-                        required={!isCustomPob}
-                        value={isCustomPob ? "Khác..." : formData.pob}
-                        onChange={e => {
-                          const val = e.target.value;
-                          if (val === 'Khác...') {
-                            setIsCustomPob(true);
-                            setFormData({ ...formData, pob: '' } as any);
-                          } else {
-                            setIsCustomPob(false);
-                            setFormData({ ...formData, pob: val } as any);
-                          }
-                        }}
+                        value={(formData.pob !== '' && !PROVINCES_LIST.includes(formData.pob)) ? 'other' : formData.pob}
+                        onChange={e => setFormData({ ...formData, pob: e.target.value === 'other' ? 'Khác' : e.target.value })}
                         className="w-full border border-slate-300 rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none bg-white"
                       >
                         <option value="">--Chọn nơi sinh--</option>
-                        <option value="Hà Nội">Hà Nội</option>
-                        <option value="Huế">Huế</option>
-                        <option value="Lai Châu">Lai Châu</option>
-                        <option value="Điện Biên">Điện Biên</option>
-                        <option value="Sơn La">Sơn La</option>
-                        <option value="Lạng Sơn">Lạng Sơn</option>
-                        <option value="Quảng Ninh">Quảng Ninh</option>
-                        <option value="Thanh Hoá">Thanh Hoá</option>
-                        <option value="Nghệ An">Nghệ An</option>
-                        <option value="Hà Tĩnh">Hà Tĩnh</option>
-                        <option value="Cao Bằng">Cao Bằng</option>
-                        <option value="Tuyên Quang">Tuyên Quang</option>
-                        <option value="Lào Cai">Lào Cai</option>
-                        <option value="Thái Nguyên">Thái Nguyên</option>
-                        <option value="Phú Thọ">Phú Thọ</option>
-                        <option value="Bắc Ninh">Bắc Ninh</option>
-                        <option value="Hưng Yên">Hưng Yên</option>
-                        <option value="Hải Phòng">Hải Phòng</option>
-                        <option value="Ninh Bình">Ninh Bình</option>
-                        <option value="Quảng Trị">Quảng Trị</option>
-                        <option value="Đà Nẵng">Đà Nẵng</option>
-                        <option value="Quảng Ngãi">Quảng Ngãi</option>
-                        <option value="Gia Lai">Gia Lai</option>
-                        <option value="Khánh Hòa">Khánh Hòa</option>
-                        <option value="Lâm Đồng">Lâm Đồng</option>
-                        <option value="Đắk Lắk">Đắk Lắk</option>
-                        <option value="TP. Hồ Chí Minh">TP. Hồ Chí Minh</option>
-                        <option value="Đồng Nai">Đồng Nai</option>
-                        <option value="Tây Ninh">Tây Ninh</option>
-                        <option value="Cần Thơ">Cần Thơ</option>
-                        <option value="Vĩnh Long">Vĩnh Long</option>
-                        <option value="Đồng Tháp">Đồng Tháp</option>
-                        <option value="Cà Mau">Cà Mau</option>
-                        <option value="An Giang">An Giang</option>
-                        <option value="Khác...">Khác...</option>
+                        {PROVINCES_LIST.map(province => (
+                          <option key={province} value={province}>{province}</option>
+                        ))}
+                        <option value="other">Khác...</option>
                       </select>
-                      {isCustomPob && (
+                      {(formData.pob !== '' && !PROVINCES_LIST.includes(formData.pob)) && (
                         <input
                           type="text"
-                          required
-                          value={formData.pob}
-                          onChange={e => setFormData({ ...formData, pob: e.target.value } as any)}
-                          placeholder="Nhập nơi sinh khác..."
-                          className="w-full border border-blue-300 rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none"
+                          value={formData.pob === 'Khác' ? '' : formData.pob}
+                          onChange={e => setFormData({ ...formData, pob: e.target.value || 'Khác' })}
+                          placeholder="Nhập tên Tỉnh/Thành phố hoặc Quốc gia..."
+                          className="w-full border border-blue-300 rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none shadow-sm animate-in fade-in"
                           autoFocus
                         />
                       )}
@@ -1267,8 +1216,9 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                         value={formData.idNumber}
                         onChange={e => handleIdNumberChange(e.target.value)}
                         onBlur={handleIdNumberBlur}
-                        className={`w-full border rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none font-mono ${duplicateWarning ? 'border-red-400 bg-red-50' : 'border-slate-300'
-                          }`}
+                        className={`w-full border rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none font-mono ${
+                          duplicateWarning ? 'border-red-400 bg-red-50' : 'border-slate-300'
+                        }`}
                         placeholder="Nhập số CCCD/CMND"
                       />
                       {isCheckingDuplicate && (
@@ -1322,10 +1272,10 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                   <div className="flex items-center gap-2 col-span-2">
                     <label className="w-32 text-right text-[12px] text-slate-600 font-medium">Địa chỉ thường trú<span className="text-red-500">*</span>:</label>
                     <input
-                      type="text"
                       required
+                      type="text"
                       value={formData.address}
-                      onChange={e => setFormData({ ...formData, address: e.target.value } as any)}
+                      onChange={e => setFormData({ ...formData, address: e.target.value })}
                       className="flex-1 border border-slate-300 rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none"
                       placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố"
                     />
@@ -1608,9 +1558,9 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                         <span className="text-[10px] text-slate-400">{doc.date} • {doc.type?.split('/')?.[1]?.toUpperCase() || 'FILE'}</span>
                       </div>
                     </div>
-                    <button
-                      onClick={() => downloadFile(doc.url, doc.name)}
-                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                    <button 
+                      onClick={() => downloadFile(doc.url, doc.name)} 
+                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" 
                       title="Tải xuống"
                     >
                       <Upload size={16} className="rotate-180" />
@@ -1631,19 +1581,19 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   const renderLightbox = () => {
     if (!zoomedImage) return null;
     return (
-      <div
+      <div 
         className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4 cursor-zoom-out"
         onClick={() => setZoomedImage(null)}
       >
-        <button
+        <button 
           className="absolute top-4 right-4 text-white/70 hover:text-white p-2 hover:bg-white/10 rounded-full transition-all"
           onClick={() => setZoomedImage(null)}
         >
           <X size={32} />
         </button>
-        <img
-          src={zoomedImage}
-          className="max-w-full max-h-full object-contain rounded shadow-2xl animate-in fade-in zoom-in duration-300"
+        <img 
+          src={zoomedImage} 
+          className="max-w-full max-h-full object-contain rounded shadow-2xl animate-in fade-in zoom-in duration-300" 
           onClick={(e) => e.stopPropagation()}
         />
       </div>
@@ -1808,14 +1758,14 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         <div className="flex gap-4 items-center">
           {selectedIds.size > 0 && <span className="text-blue-600 font-bold mr-4">Đang chọn: {selectedIds.size}</span>}
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
               disabled={currentPage === 1}
               className="px-2 py-1 border rounded bg-white hover:bg-slate-200 disabled:opacity-50"
             >« Trước</button>
             <span className="font-bold text-blue-600 px-2">Trang {currentPage} / {Math.ceil(totalStudents / pageSize) || 1}</span>
-            <button
-              onClick={() => setCurrentPage(p => p + 1)}
+            <button 
+              onClick={() => setCurrentPage(p => p + 1)} 
               disabled={currentPage >= Math.ceil(totalStudents / pageSize)}
               className="px-2 py-1 border rounded bg-white hover:bg-slate-200 disabled:opacity-50"
             >Sau »</button>
