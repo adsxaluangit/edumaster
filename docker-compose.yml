@@ -42,11 +42,11 @@ services:
       DATABASE_SSL: "false"
       DATABASE_POOL_MIN: 5
       DATABASE_POOL_MAX: 20
-      APP_KEYS: "toBeModified1,toBeModified2"
-      API_TOKEN_SALT: "toBeModified3"
-      ADMIN_JWT_SECRET: "toBeModified4"
-      TRANSFER_TOKEN_SALT: "toBeModified5"
-      JWT_SECRET: "toBeModified6"
+      APP_KEYS: "tzpAiIyTpWOp7JFFuusAbg==,9Uti3WECcKIq4hqtvToMyA==,xb5PUgH3myI4+e2MpMd4wg==,le70eZd2u2eKu8avmzRYqg=="
+      API_TOKEN_SALT: "ejeGG6uq4MMSIPYOeo+SRQ=="
+      ADMIN_JWT_SECRET: "3I/3H52evkbW5umjFgm30A=="
+      TRANSFER_TOKEN_SALT: "eBD/CT+59JouwXlBtl3gOw=="
+      JWT_SECRET: "FEMgRCOGrq3IvBAcuumEzA=="
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 1337

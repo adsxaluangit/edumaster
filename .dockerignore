@@ -8,3 +8,5 @@
 *.log
 docker-compose.yml
 Dockerfile.*
+edumaster-backend/database
+edumaster-backend/public/uploads

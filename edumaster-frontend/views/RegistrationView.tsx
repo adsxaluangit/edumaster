@@ -48,6 +48,7 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
     const [cccdFront, setCccdFront] = useState<string | null>(null);
     const [cccdBack, setCccdBack] = useState<string | null>(null);
     const [availableClasses, setAvailableClasses] = useState<any[]>([]);
+    const [isCustomPob, setIsCustomPob] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [formData, setFormData] = useState({
@@ -194,6 +195,13 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                     const backDoc  = docs.find((d: any) => d.name === 'CCCD Mặt sau');
                     if (frontDoc?.url) setCccdFront(frontDoc.url);
                     if (backDoc?.url)  setCccdBack(backDoc.url);
+                    
+                    const loadedPob = s.pob || formData.pob;
+                    if (loadedPob) {
+                        const predefined = ["Hà Nội", "Huế", "Lai Châu", "Điện Biên", "Sơn La", "Lạng Sơn", "Quảng Ninh", "Thanh Hoá", "Nghệ An", "Hà Tĩnh", "Cao Bằng", "Tuyên Quang", "Lào Cai", "Thái Nguyên", "Phú Thọ", "Bắc Ninh", "Hưng Yên", "Hải Phòng", "Ninh Bình", "Quảng Trị", "Đà Nẵng", "Quảng Ngãi", "Gia Lai", "Khánh Hòa", "Lâm Đồng", "Đắk Lắk", "TP. Hồ Chí Minh", "Đồng Nai", "Tây Ninh", "Cần Thơ", "Vĩnh Long", "Đồng Tháp", "Cà Mau", "An Giang"];
+                        setIsCustomPob(!predefined.includes(loadedPob));
+                    }
+
                     setExistingData(s);
                 } else {
                     setExistingData(null);
@@ -562,9 +570,18 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-1">Nơi sinh (Tỉnh/TP) <span className="text-red-500">*</span></label>
                                     <select
-                                        required
-                                        value={formData.pob}
-                                        onChange={e => setFormData({ ...formData, pob: e.target.value })}
+                                        required={!isCustomPob}
+                                        value={isCustomPob ? "Khác..." : formData.pob}
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            if (val === 'Khác...') {
+                                                setIsCustomPob(true);
+                                                setFormData({ ...formData, pob: '' });
+                                            } else {
+                                                setIsCustomPob(false);
+                                                setFormData({ ...formData, pob: val });
+                                            }
+                                        }}
                                         className="w-full px-4 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
                                     >
                                         <option value="">-- Chọn tỉnh/thành phố --</option>
@@ -602,7 +619,19 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                         <option value="Đồng Tháp">Đồng Tháp</option>
                                         <option value="Cà Mau">Cà Mau</option>
                                         <option value="An Giang">An Giang</option>
+                                        <option value="Khác...">Khác...</option>
                                     </select>
+                                    {isCustomPob && (
+                                        <input
+                                            type="text"
+                                            required
+                                            value={formData.pob}
+                                            onChange={e => setFormData({ ...formData, pob: e.target.value })}
+                                            placeholder="Nhập nơi sinh khác..."
+                                            className="w-full mt-2 px-4 py-2 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none shadow-sm"
+                                            autoFocus
+                                        />
+                                    )}
                                 </div>
 
                                 <div>
