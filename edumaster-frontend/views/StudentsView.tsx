@@ -553,8 +553,8 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   };
 
   const handleSave = async () => {
-    if (!formData.fullName || !formData.group || !formData.idNumber || !formData.dob) {
-      alert('Vui lòng nhập đầy đủ: Họ tên, Ngày sinh, Lớp học và Số CMND/CCCD!');
+    if (!formData.fullName || !formData.group || !formData.idNumber || !formData.dob || !formData.address) {
+      alert('Vui lòng nhập đầy đủ: Họ tên, Ngày sinh, Địa chỉ, Lớp học và Số CMND/CCCD!');
       return;
     }
 
@@ -1320,11 +1320,12 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                 </span>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-3">
                   <div className="flex items-center gap-2 col-span-2">
-                    <label className="w-32 text-right text-[12px] text-slate-600 font-medium">Địa chỉ thường trú:</label>
+                    <label className="w-32 text-right text-[12px] text-slate-600 font-medium">Địa chỉ thường trú<span className="text-red-500">*</span>:</label>
                     <input
                       type="text"
+                      required
                       value={formData.address}
-                      onChange={e => setFormData({ ...formData, address: e.target.value })}
+                      onChange={e => setFormData({ ...formData, address: e.target.value } as any)}
                       className="flex-1 border border-slate-300 rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none"
                       placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố"
                     />

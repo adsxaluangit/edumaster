@@ -227,8 +227,8 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formData.fullName || !formData.phone || !formData.idNumber || !formData.pob) {
-            alert('Vui lòng điền đầy đủ các trường bắt buộc (Họ tên, SĐT, CCCD, Nơi sinh)!');
+        if (!formData.fullName || !formData.phone || !formData.idNumber || !formData.pob || !formData.address) {
+            alert('Vui lòng điền đầy đủ các trường bắt buộc (Họ tên, SĐT, CCCD, Nơi sinh, Địa chỉ)!');
             return;
         }
         if (formData.idNumber.length !== 12) {
@@ -635,9 +635,10 @@ const RegistrationView: React.FC<RegistrationViewProps> = ({ onLoginSuccess, ini
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Địa chỉ thường trú</label>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Địa chỉ thường trú <span className="text-red-500">*</span></label>
                                     <textarea
                                         rows={1}
+                                        required
                                         value={formData.address}
                                         onChange={e => setFormData({ ...formData, address: e.target.value })}
                                         className="w-full px-4 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none resize-none"
