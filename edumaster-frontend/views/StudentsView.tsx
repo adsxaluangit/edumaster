@@ -564,7 +564,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       }
     } catch (error: any) {
       console.error(error);
-      alert('Không thể xử lý ảnh bằng AI: ' + error.message);
+      alert('Không thể xử lý ảnh bằng AI: ' + (error.message || 'Lỗi không xác định'));
     } finally {
       setIsProcessingAI(false);
     }
