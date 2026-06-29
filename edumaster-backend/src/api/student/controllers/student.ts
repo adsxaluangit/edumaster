@@ -37,10 +37,13 @@ export default factories.createCoreController('api::student.student', ({ strapi 
       }
 
       const clothingPrompt = gender === "Nữ" || gender === "female"
-        ? "(Trang phục áo vest nữ chuyên nghiệp)"
-        : "(Trang phục áo vest nam chuyên nghiệp)";
+        ? "BẮT BUỘC thay đổi trang phục hiện tại thành áo vest nữ (suit) chuyên nghiệp, lịch sự."
+        : "BẮT BUỘC thay đổi trang phục hiện tại thành áo vest nam (suit) chuyên nghiệp, lịch sự, có thắt cà vạt.";
 
-      const promptText = `Hãy biến ảnh chụp thành ảnh kiểu hộ chiếu: giữ nguyên khuôn mặt, tông màu da mịn màng, tóc gọn gàng, nền trắng tinh, ánh sáng studio giúp làm nổi bật đôi mắt và đường nét khuôn mặt, định dạng 3x4 cm,kích thước 354 × 472 pixel (ở độ phân giải 350 DPI). ${clothingPrompt}`;
+      const promptText = `Hãy biến ảnh chụp thành ảnh kiểu hộ chiếu: giữ nguyên khuôn mặt, tông màu da mịn màng, tóc gọn gàng, nền trắng tinh, ánh sáng studio giúp làm nổi bật đôi mắt và đường nét khuôn mặt, định dạng 3x4 cm, kích thước 354 × 472 pixel (ở độ phân giải 350 DPI).
+
+${clothingPrompt}`;
+
 
       const response = await aiClient.models.generateContent({
         model: 'gemini-2.5-flash-image',
