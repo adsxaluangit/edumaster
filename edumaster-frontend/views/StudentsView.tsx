@@ -1,10 +1,10 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { FileSpreadsheet, RefreshCw, Trash2, Plus, Search, Filter, ChevronDown, X, Camera, Save, Calendar, User, Upload, Check, Phone, MapPin, Briefcase, Flag, School, Edit3, Image as ImageIcon, FileText, CheckCircle2, XCircle, ShieldCheck, Printer, Download } from 'lucide-react';
 import { Student } from '../types';
 import ExcelJS from 'exceljs';
 
 import { fetchCategory, fetchCategoryPaginated, createCategory, updateCategory, deleteCategory, COLLECTIONS, uploadFile, checkDuplicateStudent } from '../services/api';
+import { SearchableSelect, Option } from '../components/SearchableSelect';
 import { formatDate, parseToISO } from '../utils/dateUtils';
 import { downloadFile } from '../utils/fileUtils';
 import { PROVINCES_LIST } from '../constants';
@@ -26,7 +26,6 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nations, setNations] = useState<any[]>([]);
   const [availableClasses, setAvailableClasses] = useState<any[]>([]);
-  const [allDecisions, setAllDecisions] = useState<any[]>([]);
 
   // Server-Side Config
   const [currentPage, setCurrentPage] = useState(1);
@@ -149,11 +148,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
       // Always use unassigned endpoint to exclude students already in decisions (handled by backend)
       const studentEndpoint = 'students/unassigned';
-      const [res] = await Promise.all([
-        fetchCategoryPaginated(studentEndpoint, currentPage, pageSize, filters, customParams),
-        // Fetch decisions only for recognition check if needed, but not for exclusion here
-        fetchCategory(COLLECTIONS.CLASS_DECISIONS).then(data => setAllDecisions(data || []))
-      ]);
+      const res = await fetchCategoryPaginated(studentEndpoint, currentPage, pageSize, filters, customParams);
 
       if (res && res.data) {
         let fetchedStudents = res.data.map(mapStudentFromApi);
@@ -306,7 +301,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       URL.revokeObjectURL(url);
     } catch (e) {
       console.error('Export Excel failed:', e);
-      alert('Lỗi khi xuất Excel. Vui lòng thử lại.');
+      alert('Lỗi khi xuất Excel. V vui lòng thử lại.');
     }
   };
 
@@ -328,8 +323,8 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   };
 
   // Handle class selection change
-  const handleClassChange = (className: string) => {
-    const selectedClass = availableClasses.find(c => c.name === className);
+  const handleClassChange = (className: string, selectedClass?: any) => {
+    if (!selectedClass) selectedClass = availableClasses.find(c => c.name === className);
     // After normalizeStrapiList: .id = documentId (string), .strapiId = numeric id
     // Strapi relation needs numeric id (strapiId) to avoid locale:null error
     const numericId = selectedClass ? String(selectedClass.strapiId || '') : '';
@@ -347,6 +342,22 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
     } else {
       setDuplicateWarning(null);
     }
+  };
+
+  const fetchClassesForDropdown = async (search: string): Promise<Option[]> => {
+    let url = `${COLLECTIONS.CLASSES}?pagination[pageSize]=20`;
+    if (search) {
+       url += `&filters[$or][0][name][$containsi]=${encodeURIComponent(search)}&filters[$or][1][code][$containsi]=${encodeURIComponent(search)}`;
+    } else {
+       url += `&sort[0]=createdAt:desc`;
+    }
+    const data = await fetchCategory(url);
+    if (!data) return [];
+    return data.map((c: any) => ({
+      id: c.name,
+      label: c.name ? `${c.code ? c.code + ' - ' : ''}${c.name}` : 'Không tên',
+      data: c
+    }));
   };
 
   // Xóa prefillDocs khi CCCD thay đổi
@@ -652,7 +663,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
     }
 
     if (formData.idNumber.length !== 12) {
-      alert('Vui lòng nhập chính xác 12 số CCCD/CMND!');
+      alert('V vui lòng nhập chính xác 12 số CCCD/CMND!');
       return;
     }
 
@@ -709,40 +720,42 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       }
     }
 
-    // 2. Check 5-year rule from previous recognition decisions
-    const conflictingDecision = allDecisions.find((d: any) => {
-      if (d.type !== 'RECOGNITION') return false;
+    // 2. Check 5-year rule from previous recognition decisions dynamically
+    try {
+      const token = localStorage.getItem('jwt_token') || '';
+      const decRes = await fetch(`/api/class-decisions?filters[type][$eq]=RECOGNITION&filters[students][id_number][$eq]=${currentIdNumber}&populate[school_class]=*`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (decRes.ok) {
+        const decJson = await decRes.json();
+        const decisions = decJson?.data || [];
+        const conflictingDecision = decisions.find((d: any) => {
+          const decClass = d.school_class || d.attributes?.school_class;
+          const decClassId = String(decClass?.documentId || decClass?.id || '');
+          const decClassName = (decClass?.name || decClass?.attributes?.name || d.class_name || '').trim().toLowerCase();
+          return (currentClassId && decClassId === currentClassId) || (decClassName === currentClassName);
+        });
 
-      const decClass = d.school_class?.data || d.school_class;
-      const decClassId = String(decClass?.documentId || decClass?.id || '');
-      const decClassName = (decClass?.name || d.class_name || '').trim().toLowerCase();
+        if (conflictingDecision) {
+          const signedDateStr = conflictingDecision.signed_date || conflictingDecision.signedDate || conflictingDecision.attributes?.signed_date;
+          if (signedDateStr) {
+            const signedDate = new Date(signedDateStr);
+            const now = new Date();
+            const diffYears = (now.getTime() - signedDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
 
-      // Match class by ID (preferred) or Name
-      const isSameClass = (currentClassId && decClassId === currentClassId) || (decClassName === currentClassName);
-      if (!isSameClass) return false;
-
-      const studentsInDec = d.students?.data || d.students || [];
-      return studentsInDec.some((s: any) =>
-        s.student_code === currentIdNumber ||
-        s.id_number === currentIdNumber ||
-        s.card_number === currentIdNumber
-      );
-    });
-
-    if (conflictingDecision) {
-      const signedDateStr = conflictingDecision.signed_date || conflictingDecision.signedDate;
-      if (signedDateStr) {
-        const signedDate = new Date(signedDateStr);
-        const now = new Date();
-        const diffYears = (now.getTime() - signedDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-
-        if (diffYears < 5) {
-          const proceed = window.confirm(`THÔNG BÁO: Học viên này ĐÃ CÓ CHỨNG CHỈ NÀY RỒI.\n(Được cấp theo Quyết định số ${conflictingDecision.decision_number || conflictingDecision.number} ngày ${signedDateStr})\n\nBạn có chắc chắn muốn đăng ký cho học viên này học lại lớp này (trong vòng 5 năm) không?`);
-          if (!proceed) return;
+            if (diffYears < 5) {
+              const decisionNumber = conflictingDecision.decision_number || conflictingDecision.number || conflictingDecision.attributes?.decision_number;
+              const proceed = window.confirm(`THÔNG BÁO: Học viên này ĐÃ CÓ CHỨNG CHỈ NÀY RỒI.\n(Được cấp theo Quyết định số ${decisionNumber || 'N/A'} ngày ${signedDateStr})\n\nBạn có chắc chắn muốn đăng ký cho học viên này học lại lớp này (trong vòng 5 năm) không?`);
+              if (!proceed) return;
+            }
+          }
         }
       }
+    } catch (e) {
+      console.warn('Failed to check 5-year rule', e);
     }
-    // -----------------------------------------------------
+
+
 
     // Prepare Payload
     const nameParts = formData.fullName.trim().split(' ');
@@ -1354,14 +1367,15 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                   {/* Row 5: Class */}
                   <div className="flex items-center gap-2 col-span-2">
                     <label className="w-32 flex-shrink-0 text-left pl-4 text-[12px] text-slate-600 font-medium whitespace-nowrap">Lớp học<span className="text-red-500">*</span>:</label>
-                    <select
-                      value={formData.group}
-                      onChange={e => handleClassChange(e.target.value)}
-                      className="flex-1 border border-slate-300 rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none bg-white font-medium text-blue-700"
-                    >
-                      <option value="">--Chọn lớp học--</option>
-                      {availableClasses.map(cls => <option key={cls.id} value={cls.name}>{cls.name}</option>)}
-                    </select>
+                    <div className="flex-1">
+                      <SearchableSelect
+                        value={formData.group}
+                        onChange={(val, opt) => handleClassChange(val, opt?.data)}
+                        fetchOptions={fetchClassesForDropdown}
+                        placeholder="--Chọn lớp học--"
+                        defaultLabel={formData.group || "--Chọn lớp học--"}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
