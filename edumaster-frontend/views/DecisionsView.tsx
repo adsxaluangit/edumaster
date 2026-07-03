@@ -2800,6 +2800,231 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     printWindow.document.close();
   };
 
+  const handlePrintRegistrationForms = () => {
+    if (tempStudents.length === 0) {
+      alert("Không có học viên nào để in phiếu!");
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert("Vui lòng cho phép Pop-ups trên trình duyệt để in phiếu.");
+      return;
+    }
+
+    const group = formData.trainingCourse || formData.className;
+    const formsHtml = tempStudents.map(student => {
+      let formattedDob = student.dob;
+      if (student.dob && student.dob.includes('-')) {
+        const parts = student.dob.split('-');
+        if (parts.length === 3) formattedDob = `${parts[2]}/${parts[1]}/${parts[0]}`;
+      } else if (student.dob && student.dob.includes(',')) {
+        formattedDob = student.dob.replace(/,/g, '/');
+      }
+
+      return `
+        <div class="page-break">
+          <div class="header-right">
+            ${student.photo ? '<img src="' + student.photo + '" alt="Ảnh 3x4" />' : 'Ảnh 3x4'}
+          </div>
+          
+          <div class="header-left">
+            <div class="agency">CỤC HÀNG HẢI VÀ ĐƯỜNG THUỶ VIỆT NAM</div>
+            <div class="school">TRƯỜNG CAO ĐẲNG HÀNG HẢI VÀ ĐƯỜNG THUỶ I</div>
+          </div>
+
+          <div class="title">PHIẾU ĐĂNG KÝ HỌC</div>
+
+          <div class="content">
+            <div class="info-row">
+              <span class="label">Họ và tên:</span>
+              <span class="value"><b>${(student.fullName || '').toUpperCase()}</b></span>
+            </div>
+            <div class="info-row" style="margin-bottom: -8px;">
+              <span class="label">Ngày, tháng, năm sinh:</span>
+              <span class="value">${formattedDob || ''}</span>
+            </div>
+
+            <div style="line-height: 1.1; margin-top: 0px;">
+              <div class="row-group-flex" style="margin-bottom: 0px;">
+                <span class="label">Nơi sinh:</span>
+                <span class="value" style="flex: 1.5">${student.hometown || ''}</span>
+                <span class="label" style="margin-left: 10px;">Số CCCD:</span>
+                <span class="value" style="flex: 1.5">${student.cardNumber || student.studentCode || ''}</span>
+              </div>
+              <div class="row-group-flex" style="margin-bottom: 0px;">
+                <span class="label">Dân tộc:</span>
+                <span class="value" style="flex: 1.5"></span>
+                <span class="label" style="margin-left: 10px;">Quốc tịch:</span>
+                <span class="value" style="flex: 1.5">Việt Nam</span>
+              </div>
+              <div class="info-row" style="margin-bottom: 0px;">
+                <span class="label">Số điện thoại liên lạc:</span>
+                <span class="value">${student.phone || ''}</span>
+              </div>
+              <div class="info-row" style="margin-bottom: 0px;">
+                <span class="label">Đơn vị công tác:</span>
+                <span class="value"></span>
+              </div>
+              <div class="info-row" style="margin-bottom: 0px;">
+                <span class="label">Địa chỉ thường trú:</span>
+                <span class="value">${student.address || ''}</span>
+              </div>
+              <div class="info-row" style="margin-bottom: 0px;">
+                <span class="label">Đăng ký học:</span>
+                <span class="value">${group || ''}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="signature-section" style="margin-right: 15mm; margin-top: 10px;">
+            <div class="signature-box">
+              <div class="role">Học viên (ký và ghi rõ họ tên)</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+      <meta charset="UTF-8">
+      <title>In Phiếu Đăng Ký Học - Khóa ${formData.trainingCourse}</title>
+      <style>
+        @page {
+            size: A5 landscape;
+            margin: 0;
+        }
+        body {
+          font-family: 'Times New Roman', Times, serif;
+          font-size: 12pt;
+          line-height: 1.25;
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+          background-color: #fff;
+          color: #000;
+        }
+        .page-break {
+          page-break-after: always;
+          padding: 1.5cm 1.5cm 1.5cm 2cm;
+          box-sizing: border-box;
+          height: 100vh;
+          position: relative;
+        }
+        .page-break:last-child {
+          page-break-after: auto;
+        }
+        .header-right {
+          float: right;
+          width: 3cm;
+          height: 4cm;
+          border: 1px solid #777;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: red;
+          font-size: 10pt;
+          overflow: hidden;
+          margin-left: 15px;
+          margin-bottom: 10px;
+        }
+        .header-right img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .header-left {
+          text-align: center;
+          font-size: 10pt;
+          margin-bottom: 15px;
+        }
+        .header-left .agency {
+          text-transform: uppercase;
+        }
+        .header-left .school {
+          text-transform: uppercase;
+          font-weight: bold;
+        }
+        .title {
+          text-align: center;
+          font-weight: bold;
+          font-size: 14pt;
+          margin: 0 0 15px 0;
+          text-transform: uppercase;
+        }
+        .info-row {
+          display: flex;
+          margin-bottom: 4px;
+        }
+        .info-row .label {
+          white-space: nowrap;
+          min-width: fit-content;
+        }
+        .info-row .value {
+          flex: 1;
+          margin-left: 5px;
+          margin-right: 5px;
+          display: flex;
+          align-items: flex-end;
+          padding-bottom: 2px;
+        }
+        .row-group-flex {
+          display: flex;
+          width: 100%;
+          margin-bottom: 2px;
+        }
+        .row-group-flex .label {
+          white-space: nowrap;
+          min-width: fit-content;
+        }
+        .row-group-flex .value {
+          margin-left: 5px;
+          display: flex;
+          align-items: flex-end;
+          padding-bottom: 2px;
+        }
+        .content {
+          margin-bottom: 10px;
+        }
+        .signature-section {
+          display: flex;
+          justify-content: flex-end;
+          margin-top: 5px;
+        }
+        .signature-box {
+          text-align: center;
+          width: 6cm;
+        }
+        .signature-box .role {
+          font-style: italic;
+        }
+        @media print {
+            body {
+                padding: 0;
+            }
+            .page-break {
+                padding-top: 1.5cm;
+                padding-left: 2cm;
+                padding-right: 1.5cm;
+                height: 148mm; /* A5 landscape height */
+                width: 210mm;  /* A5 landscape width */
+            }
+        }
+      </style>
+    </head>
+    <body onload="setTimeout(() => window.print(), 500)">
+      ${formsHtml}
+    </body>
+    </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
+
   const renderDecisionForm = () => (
     <div className="fixed inset-0 bg-black/60 z-[150] flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white w-full max-w-7xl rounded-xl shadow-2xl overflow-hidden border border-slate-300 flex flex-col h-[92vh]">
@@ -2846,9 +3071,14 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
                 <ScrollText size={13} /> DS Đề nghị
               </button>
             ) : (
-              <button onClick={handlePrintStudentCards} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white rounded-md text-[12px] font-semibold transition-colors">
-                <IdCard size={13} /> In thẻ
-              </button>
+              <>
+                <button onClick={handlePrintRegistrationForms} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white rounded-md text-[12px] font-semibold transition-colors">
+                  <Printer size={13} /> In Phiếu ĐK
+                </button>
+                <button onClick={handlePrintStudentCards} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white rounded-md text-[12px] font-semibold transition-colors">
+                  <IdCard size={13} /> In thẻ
+                </button>
+              </>
             )}
             {viewType === 'RECOGNITION' && (
               <button

@@ -969,7 +969,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       <title>Phiếu đăng ký học</title>
       <style>
         @page {
-            size: A5 portrait;
+            size: A5 landscape;
             margin: 0;
         }
         body {
