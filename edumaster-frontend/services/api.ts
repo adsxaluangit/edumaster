@@ -192,7 +192,8 @@ export const fetchCategory = async (collectionName: string) => {
 };
 
 export const fetchCategoryPaginated = async (collectionName: string, page: number = 1, pageSize: number = 50, filters: string = '', customParams: string = 'populate=*') => {
-    let endpoint = `/${collectionName}?${customParams}&pagination[page]=${page}&pagination[pageSize]=${pageSize}&publicationState=preview`;
+    const separator = collectionName.includes('?') ? '&' : '?';
+    let endpoint = `/${collectionName}${separator}${customParams ? customParams + '&' : ''}pagination[page]=${page}&pagination[pageSize]=${pageSize}&publicationState=preview`;
     if (filters) {
         endpoint += `&${filters}`;
     }
