@@ -376,7 +376,10 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   // Constant for full deep population of students when needed
   const DEEP_POPULATE_STUDENTS = `populate[school_class]=true&populate[related_decision]=true&populate[students][populate][documents][fields][0]=name&populate[students][populate][documents][fields][1]=url&populate[students][populate][documents][fields][2]=type&populate[students][fields][0]=full_name&populate[students][fields][1]=dob&populate[students][fields][2]=gender&populate[students][fields][3]=card_number&populate[students][fields][4]=id_number&populate[students][fields][5]=student_code&populate[students][fields][6]=pob&populate[students][fields][7]=photo&populate[students][fields][8]=address&populate[students][fields][9]=notes&populate[students][fields][10]=phone`;
 
+  const loadIdRef = React.useRef(0);
+
   const loadDecisions = async () => {
+    const currentLoadId = ++loadIdRef.current;
     setLoading(true);
     let url = `${COLLECTIONS.CLASS_DECISIONS}?filters[type][$eq]=${viewType}&populate[school_class]=true&populate[related_decision]=true&populate[students]=true&sort[0]=signed_date:desc&sort[1]=id:desc`;
 
@@ -385,6 +388,10 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     }
 
     const res = await fetchCategoryPaginated(url, currentPage, ITEMS_PER_PAGE, '', '');
+    
+    // Ignore stale responses to fix race condition
+    if (loadIdRef.current !== currentLoadId) return;
+
     if (res) {
       const mapped = res.data.map((d: any, index: number) => {
         const classData = d.school_class?.data || d.school_class;
@@ -515,7 +522,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   };
 
   const loadExamGrades = async () => {
-    const data = await fetchCategory(COLLECTIONS.EXAM_GRADES);
+    const data = await fetchCategoryAll(`${COLLECTIONS.EXAM_GRADES}?populate=decision`, '');
     if (data) setExamGrades(data);
   };
 
@@ -640,9 +647,11 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
 
   const filteredDecisions = decisions; // decisions are already paginated and filtered by the server
 
-  const loadAvailableOpeningDecisions = async () => {
-    const allOpenings = await fetchCategoryAll(`${COLLECTIONS.CLASS_DECISIONS}?filters[type][$eq]=OPENING&populate[school_class]=true`);
-    const allRecognitions = await fetchCategoryAll(`${COLLECTIONS.CLASS_DECISIONS}?filters[type][$eq]=RECOGNITION&fields[0]=id&populate[related_decision]=true`);
+  const loadAvailableOpeningDecisions = async (currentEditingId?: string) => {
+    const activeEditingId = currentEditingId !== undefined ? currentEditingId : editingId;
+    const allOpenings = await fetchCategoryAll(`${COLLECTIONS.CLASS_DECISIONS}?filters[type][$eq]=OPENING&populate[school_class]=true`, '');
+    const allRecognitions = await fetchCategoryAll(`${COLLECTIONS.CLASS_DECISIONS}?filters[type][$eq]=RECOGNITION&fields[0]=id&populate[related_decision]=true`, '');
+    const liveExamGrades = await fetchCategoryAll(`${COLLECTIONS.EXAM_GRADES}?populate=decision&fields[0]=id`, '');
     
     const linkedOpeningIds = new Set(
       allRecognitions.map((d: any) => {
@@ -652,7 +661,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     );
 
     const decisionIdsWithGrades = new Set<string>();
-    examGrades.forEach(eg => {
+    liveExamGrades.forEach((eg: any) => {
       const did = eg.decision?.documentId || eg.decision?.id || eg.decision?.data?.id || eg.decision?.data?.documentId;
       if (did) decisionIdsWithGrades.add(String(did));
     });
@@ -661,8 +670,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
        const id = String(d.documentId || d.id);
        if (!decisionIdsWithGrades.has(id)) return false;
        const isUsedByAnother = linkedOpeningIds.has(id);
-       if (!editingId) return !isUsedByAnother;
-       const currentDecision = decisions.find(rd => rd.id === editingId);
+       if (!activeEditingId) return !isUsedByAnother;
+       const currentDecision = decisions.find(rd => rd.id === activeEditingId);
        const usedByThisOne = currentDecision?.relatedOpeningId && String(currentDecision.relatedOpeningId) === id;
        return !isUsedByAnother || usedByThisOne;
     }).map((d: any) => {
@@ -670,7 +679,10 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         return {
           id: String(d.documentId || d.id),
           className: classData?.attributes?.name || classData?.name || '',
-          number: d.decision_number || ''
+          number: d.decision_number || '',
+          classCode: classData?.attributes?.code || classData?.code || '',
+          trainingCourse: d.training_course || '',
+          classId: String(classData?.documentId || classData?.id || '')
         };
     });
     setAvailableOpeningDecisions(available);
@@ -744,7 +756,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         });
       }
     } else {
-      const openingDecision = decisions.find(d => String(d.id) === selectedId);
+      const openingDecision = availableOpeningDecisions.find(d => String(d.id) === selectedId);
       if (openingDecision) {
         setFormData({
           ...formData,
@@ -849,8 +861,8 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
 
   const handleSaveDecision = async () => {
     if (editingId && checkIfLocked(editingId)) {
-      alert("KHÔNG THỂ LƯU: Quyết định mở lớp này đã có Quyết định công nhận tương ứng. Vui lòng xóa Quyết định công nhận trước nếu cần thay đổi.");
-      return;
+      const confirmForce = window.confirm("CẢNH BÁO: Quyết định này đã có QĐ Công nhận tốt nghiệp. Việc sửa đổi dữ liệu (đặc biệt là danh sách học viên) có thể làm sai lệch dữ liệu điểm và chứng chỉ! Bạn có CHẮC CHẮN muốn LƯU đè không?");
+      if (!confirmForce) return;
     }
     if (!formData.number) {
       alert("Vui lòng nhập Số quyết định!");
@@ -1172,7 +1184,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     if (e) e.stopPropagation();
     
     if (checkIfLocked(d.id) && !e) {
-      alert("Quyết định này đã bị khóa (Đã có QĐ Công nhận). Bạn chỉ có thể xem, không thể sửa.");
+      alert("LƯU Ý: Quyết định này đã có QĐ Công nhận. Hệ thống khuyến cáo không nên sửa. Nếu bạn vẫn muốn sửa, hãy cẩn thận vì nó ảnh hưởng đến QĐ Công nhận liên quan.");
     }
     
     setEditingId(d.id);
@@ -1185,7 +1197,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
     // Clear tempStudents initially while fetching full data
     setTempStudents([]);
     if (d.type === 'RECOGNITION') {
-      loadAvailableOpeningDecisions();
+      loadAvailableOpeningDecisions(d.id);
     }
     setIsFormOpen(true);
     setLoading(true);
