@@ -93,7 +93,7 @@ const ExamApprovalView: React.FC = () => {
         try {
             const [decisionsData, subjectsData] = await Promise.all([
                 fetchCategoryAll(`${COLLECTIONS.CLASS_DECISIONS}?populate[school_class]=true&populate[related_decision]=true&populate[students][count]=true`, ''),
-                fetchCategoryAll(COLLECTIONS.SUBJECTS, '')
+                fetchCategoryAll(COLLECTIONS.SUBJECTS, 'populate=*')
             ]);
 
             // 1. Identify IDs of Opening decisions that already have a Recognition decision
