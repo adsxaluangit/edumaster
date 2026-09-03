@@ -883,7 +883,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
             date: new Date().toLocaleDateString('vi-VN'),
             url: finalDocUrl,
             student: studentObj?.strapiId || studentId, // Use numeric ID for relation
-            id_number: (studentObj as any)?.idNumber || '' // CCCD — dùng để chia sẻ docs qua nhiều lớp
+            id_number: (studentObj as any)?.idNumber || (studentObj as any)?.studentCode || '' // CCCD — dùng để chia sẻ docs qua nhiều lớp
           };
 
           // Gọi API replace-or-create: nếu đã có doc cùng tên + CCCD → cập nhật URL

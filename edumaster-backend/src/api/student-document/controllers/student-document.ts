@@ -82,11 +82,30 @@ export default factories.createCoreController('api::student-document.student-doc
       const fs = require('fs');
       const path = require('path');
 
+      // Tự động suy ra id_number nếu bị thiếu
+      let targetIdNumber = id_number || '';
+      if (!targetIdNumber && student) {
+        const stRow = await knex('students')
+          .where('id', student)
+          .orWhere('document_id', String(student))
+          .first();
+        if (stRow) {
+          targetIdNumber = stRow.id_number || stRow.student_code || '';
+        }
+      }
+
+      if (!targetIdNumber && url) {
+        const match = String(url).match(/[_a-zA-Z](\d{9,12})_/);
+        if (match) {
+          targetIdNumber = match[1];
+        }
+      }
+
       // Tìm record cũ theo id_number + name HOẶC theo student_id + name HOẶC theo url
       let existing: any = null;
-      if (id_number) {
+      if (targetIdNumber) {
         existing = await knex('student_documents')
-          .where({ id_number, name })
+          .where({ id_number: targetIdNumber, name })
           .orderBy('id', 'desc')
           .first();
       }
@@ -131,7 +150,7 @@ export default factories.createCoreController('api::student-document.student-doc
           .update({
             url,
             type: type || existing.type,
-            id_number: id_number || existing.id_number,
+            id_number: targetIdNumber || existing.id_number,
             date: date || existing.date,
             updated_at: new Date()
           });
@@ -156,7 +175,7 @@ export default factories.createCoreController('api::student-document.student-doc
             url,
             type: type || existing.type,
             date: date || existing.date,
-            id_number: id_number || existing.id_number,
+            id_number: targetIdNumber || existing.id_number,
             replaced: true
           }
         };
@@ -169,7 +188,7 @@ export default factories.createCoreController('api::student-document.student-doc
           url,
           type: type || '',
           date: date || new Date().toLocaleDateString('vi-VN'),
-          id_number: id_number || '',
+          id_number: targetIdNumber || '',
           student: student ? Number(student) : undefined,
           publishedAt: new Date().toISOString()
         } as any
@@ -182,7 +201,7 @@ export default factories.createCoreController('api::student-document.student-doc
           url: (newDoc as any).url,
           type: (newDoc as any).type,
           date: (newDoc as any).date,
-          id_number: (newDoc as any).id_number,
+          id_number: (newDoc as any).id_number || targetIdNumber,
           replaced: false
         }
       };
