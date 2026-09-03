@@ -36,7 +36,7 @@ export default factories.createCoreController('api::student.student', ({ strapi 
         }
       }
 
-      const promptText = `Hãy biến ảnh chụp thành ảnh kiểu hộ chiếu: BẮT BUỘC giữ nguyên tuyệt đối khuôn mặt và mái tóc giống y hệt ảnh gốc (không chỉnh sửa quá đà hay làm khác đi so với ảnh gốc), BẮT BUỘC xóa phông nền cũ và thay bằng nền màu trắng tinh (pure white background), tông màu da tự nhiên, ánh sáng studio, định dạng 3x4 cm, kích thước 354 × 472 pixel (ở độ phân giải 350 DPI), luôn luôn mặc áo véc, sơ mi trắng và đeo cà vạt.`;
+      const promptText = `Hãy biến ảnh chụp thành ảnh kiểu hộ chiếu: BẮT BUỘC giữ nguyên tuyệt đối khuôn mặt và mái tóc giống y hệt ảnh gốc (không chỉnh sửa quá đà hay làm khác đi so với ảnh gốc), BẮT BUỘC xóa phông nền cũ và thay bằng nền màu trắng tinh (pure white background), BẮT BUỘC làm sáng vùng khuôn mặt — ánh sáng studio chiếu đều và đủ sáng lên toàn bộ mặt (không để bóng tối hay vùng tối trên mặt), tông màu da tự nhiên và sáng tươi, mặt sáng rõ nét không bị tối, ánh sáng studio chuẩn ảnh thẻ, định dạng 3x4 cm, kích thước 354 × 472 pixel (ở độ phân giải 350 DPI), luôn luôn mặc áo véc, sơ mi trắng và đeo cà vạt.`;
 
       const response = await aiClient.models.generateContent({
         model: 'gemini-2.5-flash-image',
