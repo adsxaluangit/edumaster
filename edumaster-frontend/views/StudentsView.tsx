@@ -567,7 +567,10 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       });
       
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.message || 'Lỗi xử lý ảnh');
+      if (!res.ok) {
+        const errorMsg = data.error?.message || (typeof data.error === 'string' ? data.error : '') || data.message || 'Lỗi xử lý ảnh';
+        throw new Error(errorMsg);
+      }
       
       if (data.processedImage) {
         const compressed = await compressAndResizeImage(data.processedImage, 900, 1200, 0.9);

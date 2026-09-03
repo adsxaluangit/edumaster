@@ -19,7 +19,9 @@ import {
   Award,
   ClipboardCheck,
   FilePenLine,
-  Search
+  Search,
+  Sparkles,
+  Key
 } from 'lucide-react';
 import { UserRole, NavItem } from './types';
 
@@ -68,4 +70,5 @@ export const CATEGORY_TYPES = [
   { id: 'teachers', label: 'Giảng viên', icon: <GraduationCap size={18} /> },
   { id: 'classes', label: 'Lớp học', icon: <BookOpen size={18} /> },
   { id: 'print_templates', label: 'Mẫu In', icon: <Printer size={18} /> },
+  { id: 'ai_config', label: 'Cấu hình AI', icon: <Sparkles size={18} /> },
 ];
