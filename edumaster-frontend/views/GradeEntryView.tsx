@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Calculator, Save, BookOpen, Users, AlertCircle, CheckCircle2, X } from 'lucide-react';
-import { fetchCategory, createCategory, updateCategory, fetchItem, COLLECTIONS } from '../services/api';
+import { fetchCategory, fetchCategoryAll, createCategory, updateCategory, fetchItem, COLLECTIONS } from '../services/api';
 
 // Interfaces
 interface DecisionRecord {
@@ -76,8 +76,8 @@ const GradeEntryView: React.FC = () => {
         setLoading(true);
         try {
             const [decisionsData, subjectsData] = await Promise.all([
-                fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?populate[school_class]=true&populate[related_decision]=true&populate[students]=true`),
-                fetchCategory(COLLECTIONS.SUBJECTS)
+                fetchCategoryAll(`${COLLECTIONS.CLASS_DECISIONS}?populate[school_class]=true&populate[related_decision]=true&populate[students][count]=true`, ''),
+                fetchCategoryAll(COLLECTIONS.SUBJECTS, 'populate=*')
             ]);
 
             const allDecs = decisionsData || [];
@@ -108,8 +108,8 @@ const GradeEntryView: React.FC = () => {
                 classId: (d.school_class?.data?.documentId || d.school_class?.documentId || d.school_class?.data?.id || d.school_class?.id),
                 trainingCourse: d.training_course,
                 signedDate: d.signed_date,
-                studentCount: (d.students?.data?.length || d.students?.length || 0),
-                students: d.students,
+                studentCount: (d.students?.count ?? (d.students?.data?.length || d.students?.length || 0)),
+                students: [], // Save memory, don't keep full list
                 type: d.type
             }));
 
@@ -178,17 +178,24 @@ const GradeEntryView: React.FC = () => {
             setDecisionSubjects(classSubs);
 
             // 2. Fetch Students and filter out those already recognized
-            const allDecsForFilter = await fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?populate=students`);
+            const allDecsForFilter = await fetchCategoryAll(`${COLLECTIONS.CLASS_DECISIONS}?filters[type][$eq]=RECOGNITION&populate[students][fields][0]=id`, '');
             const recognizedInAny = new Set<string>();
-            allDecsForFilter?.filter((d: any) => d.type === 'RECOGNITION').forEach((d: any) => {
+            (allDecsForFilter || []).forEach((d: any) => {
                 const sData = d.students?.data || d.students || [];
                 sData.forEach((s: any) => recognizedInAny.add(String(s.documentId || s.id)));
             });
 
             let rawStudents = [];
-            const studentSrc = decision.students;
-            if (Array.isArray(studentSrc)) rawStudents = studentSrc;
-            else if (studentSrc?.data) rawStudents = studentSrc.data;
+            const decisionId = decision.documentId || decision.id;
+            const fullDecisionRaw = await fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?filters[documentId][$eq]=${decisionId}&populate[students][populate]=*`);
+            
+            if (fullDecisionRaw && fullDecisionRaw.length > 0) {
+                const fd = fullDecisionRaw[0];
+                if (fd.students) {
+                    if (Array.isArray(fd.students)) rawStudents = fd.students;
+                    else if (fd.students.data) rawStudents = fd.students.data;
+                }
+            }
 
             const mappedStudents: Student[] = rawStudents
                 .map((s: any) => ({
@@ -326,7 +333,7 @@ const GradeEntryView: React.FC = () => {
         if (!selectedDecision) return null;
 
         return (
-            <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="fixed inset-0 bg-black/70 z-[150] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                 <div className="bg-white w-full max-w-6xl rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-300">
                     {/* Header */}
                     <div className="bg-slate-800 text-white px-4 py-3 flex justify-between items-center shrink-0">
@@ -480,28 +487,32 @@ const GradeEntryView: React.FC = () => {
     };
 
     return (
-        <div className="p-6 max-w-7xl mx-auto">
-            <div className="mb-8 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="p-3 bg-white rounded-xl shadow-sm border border-slate-200">
-                        <Calculator size={28} className="text-green-600" />
+        <div className="p-4 max-w-7xl mx-auto">
+            <div className="mb-5 flex items-center gap-4">
+
+                {/* Left: Icon + Title */}
+                <div className="flex items-center gap-3 shrink-0">
+                    <div className="p-2.5 bg-white rounded-xl shadow-sm border border-slate-200">
+                        <Calculator size={22} className="text-green-600" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-slate-800">Nhập điểm thi</h1>
-                        <p className="text-slate-500">Quản lý điểm thi kết thúc học phần theo Quyết định mở lớp</p>
+                        <h1 className="text-base font-bold text-slate-800 leading-tight">Nhập điểm thi</h1>
+                        <p className="text-xs text-slate-400">Quản lý điểm thi kết thúc học phần theo Quyết định mở lớp</p>
                     </div>
                 </div>
-            </div>
 
-            <div className="mb-6 relative">
-                <Search size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                    type="text"
-                    placeholder="Tìm theo quyết định, lớp..."
-                    className="pl-10 pr-4 py-3 w-full bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none transition-all shadow-sm"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
+                {/* Center: Search Bar */}
+                <div className="flex-1 relative group">
+                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-green-500 transition-colors" />
+                    <input
+                        type="text"
+                        placeholder="Tìm theo quyết định, lớp..."
+                        className="pl-9 pr-4 py-2 w-full bg-white border border-slate-200 rounded-lg text-sm outline-none shadow-sm focus:ring-2 focus:ring-green-100 focus:border-green-300 transition-all"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

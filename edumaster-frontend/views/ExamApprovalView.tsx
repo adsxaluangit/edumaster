@@ -17,7 +17,7 @@ import {
     FileText,
     GraduationCap
 } from 'lucide-react';
-import { fetchCategory, createCategory, updateCategory, fetchItem, COLLECTIONS } from '../services/api';
+import { fetchCategory, fetchCategoryAll, createCategory, updateCategory, fetchItem, COLLECTIONS } from '../services/api';
 import { formatDate } from '../utils/dateUtils';
 
 const API_BASE_URL = process.env.API_URL ? process.env.API_URL.replace(/\/api\/?$/, '') : ''; // Use relative base for images
@@ -92,8 +92,8 @@ const ExamApprovalView: React.FC = () => {
         setLoading(true);
         try {
             const [decisionsData, subjectsData] = await Promise.all([
-                fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?populate[school_class]=true&populate[related_decision]=true&populate[students]=true`),
-                fetchCategory(COLLECTIONS.SUBJECTS)
+                fetchCategoryAll(`${COLLECTIONS.CLASS_DECISIONS}?populate[school_class]=true&populate[related_decision]=true&populate[students][count]=true`, ''),
+                fetchCategoryAll(COLLECTIONS.SUBJECTS, 'populate=*')
             ]);
 
             // 1. Identify IDs of Opening decisions that already have a Recognition decision
@@ -124,8 +124,8 @@ const ExamApprovalView: React.FC = () => {
                 className: (d.school_class?.data?.attributes?.name || d.school_class?.name || d.school_class?.attributes?.name),
                 classCode: (d.school_class?.data?.attributes?.code || d.school_class?.code || d.school_class?.attributes?.code || 'NO-CODE'),
                 classId: (d.school_class?.data?.documentId || d.school_class?.documentId || d.school_class?.data?.id || d.school_class?.id),
-                studentCount: (d.students?.data?.length || d.students?.length || 0),
-                students: d.students // Keep raw reference
+                studentCount: (d.students?.count ?? (d.students?.data?.length || d.students?.length || 0)),
+                students: [] // Keep raw reference empty for now to save memory
             }));
 
             setDecisions(validDecisions);
@@ -786,28 +786,32 @@ const ExamApprovalView: React.FC = () => {
     // RENDERERS
 
     const renderDecisionList = () => (
-        <div className="p-6 max-w-7xl mx-auto">
-            <div className="mb-8 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="p-3 bg-white rounded-xl shadow-sm border border-slate-200">
-                        <ClipboardCheck size={28} className="text-blue-600" />
+        <div className="p-4 max-w-7xl mx-auto">
+            <div className="mb-5 flex items-center gap-4">
+
+                {/* Left: Icon + Title */}
+                <div className="flex items-center gap-3 shrink-0">
+                    <div className="p-2.5 bg-white rounded-xl shadow-sm border border-slate-200">
+                        <ClipboardCheck size={22} className="text-blue-600" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-slate-800">Duyệt thi</h1>
-                        <p className="text-slate-500">Chọn Quyết định mở lớp để duyệt danh sách thi</p>
+                        <h1 className="text-base font-bold text-slate-800 leading-tight">Duyệt thi</h1>
+                        <p className="text-xs text-slate-400">Chọn Quyết định mở lớp để duyệt danh sách thi</p>
                     </div>
                 </div>
-            </div>
 
-            <div className="mb-6 relative">
-                <Search size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                    type="text"
-                    placeholder="Tìm theo số quyết định, tên lớp..."
-                    className="pl-10 pr-4 py-3 w-full bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
+                {/* Center: Search Bar */}
+                <div className="flex-1 relative group">
+                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                    <input
+                        type="text"
+                        placeholder="Tìm theo số quyết định, tên lớp..."
+                        className="pl-9 pr-4 py-2 w-full bg-white border border-slate-200 rounded-lg text-sm outline-none shadow-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition-all"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+
             </div>
 
             {loading ? (
@@ -866,8 +870,8 @@ const ExamApprovalView: React.FC = () => {
         if (!selectedDecision) return null;
 
         return (
-            <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="bg-white w-full max-w-6xl rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-300">
+            <div className="fixed inset-0 bg-black/70 z-[150] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white w-full max-w-6xl rounded-xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden border border-slate-300">
                     {/* Header */}
                     <div className="bg-slate-800 text-white px-4 py-3 flex justify-between items-center shrink-0">
                         <div className="flex items-center gap-3">

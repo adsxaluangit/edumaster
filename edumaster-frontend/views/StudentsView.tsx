@@ -1,11 +1,13 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { FileSpreadsheet, RefreshCw, Trash2, Plus, Search, Filter, ChevronDown, X, Camera, Save, Calendar, User, Upload, Check, Phone, MapPin, Briefcase, Flag, School, Edit3, Image as ImageIcon, FileText, CheckCircle2, XCircle, ShieldCheck, Printer } from 'lucide-react';
+import { FileSpreadsheet, RefreshCw, Trash2, Plus, Search, Filter, ChevronDown, X, Camera, Save, Calendar, User, Upload, Check, Phone, MapPin, Briefcase, Flag, School, Edit3, Image as ImageIcon, FileText, CheckCircle2, XCircle, ShieldCheck, Printer, Download, Eye } from 'lucide-react';
 import { Student } from '../types';
+import ExcelJS from 'exceljs';
 
 import { fetchCategory, fetchCategoryPaginated, createCategory, updateCategory, deleteCategory, COLLECTIONS, uploadFile, checkDuplicateStudent } from '../services/api';
+import { SearchableSelect, Option } from '../components/SearchableSelect';
 import { formatDate, parseToISO } from '../utils/dateUtils';
 import { downloadFile } from '../utils/fileUtils';
+import { PROVINCES_LIST } from '../constants';
 
 
 
@@ -24,7 +26,6 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nations, setNations] = useState<any[]>([]);
   const [availableClasses, setAvailableClasses] = useState<any[]>([]);
-  const [allDecisions, setAllDecisions] = useState<any[]>([]);
 
   // Server-Side Config
   const [currentPage, setCurrentPage] = useState(1);
@@ -34,6 +35,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
   // Photo states
   const [studentPhoto, setStudentPhoto] = useState<string | null>(null);
+  const [isProcessingAI, setIsProcessingAI] = useState(false);
   const [isCameraLive, setIsCameraLive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -44,6 +46,8 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   const [uploadingDocName, setUploadingDocName] = useState<string | null>(null);
   const [viewingDocsStudentId, setViewingDocsStudentId] = useState<string | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  const [sharedDocs, setSharedDocs] = useState<any[]>([]);
+  const [sharedDocsLoading, setSharedDocsLoading] = useState(false);
   const docInputRef = useRef<HTMLInputElement>(null);
 
   // --- Duplicate guard state ---
@@ -52,6 +56,9 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
   // --- Docs to copy from source student when using "+" button ---
   const [prefilledStudentDocs, setPrefilledStudentDocs] = useState<any[]>([]);
+
+  // --- Docs fetch theo CCCD khi nhập form mới ---
+  const [prefillDocs, setPrefillDocs] = useState<{front: string|null, back: string|null}>({front: null, back: null});
 
   const [formData, setFormData] = useState({
     studentCode: '',
@@ -141,11 +148,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
       // Always use unassigned endpoint to exclude students already in decisions (handled by backend)
       const studentEndpoint = 'students/unassigned';
-      const [res] = await Promise.all([
-        fetchCategoryPaginated(studentEndpoint, currentPage, pageSize, filters, customParams),
-        // Fetch decisions only for recognition check if needed, but not for exclusion here
-        fetchCategory(COLLECTIONS.CLASS_DECISIONS).then(data => setAllDecisions(data || []))
-      ]);
+      const res = await fetchCategoryPaginated(studentEndpoint, currentPage, pageSize, filters, customParams);
 
       if (res && res.data) {
         let fetchedStudents = res.data.map(mapStudentFromApi);
@@ -202,6 +205,106 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   // When class filter active: frontend also strips out students assigned to OPENING decisions (see loadData above)
   const filteredStudents = students;
 
+  // Export Excel
+  const handleExportExcel = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const ws = workbook.addWorksheet('Danh sách học viên');
+
+      ws.columns = [
+        { header: 'STT', key: 'stt', width: 6 },
+        { header: 'Mã HV / CCCD', key: 'studentCode', width: 18 },
+        { header: 'Họ và Tên', key: 'fullName', width: 28 },
+        { header: 'Giới tính', key: 'gender', width: 10 },
+        { header: 'Ngày sinh', key: 'dob', width: 14 },
+        { header: 'Nơi sinh', key: 'pob', width: 22 },
+        { header: 'Dân tộc', key: 'ethnicity', width: 12 },
+        { header: 'Quốc tịch', key: 'nationality', width: 12 },
+        { header: 'Số điện thoại', key: 'phone', width: 16 },
+        { header: 'Số CCCD', key: 'idNumber', width: 18 },
+        { header: 'Lớp học', key: 'className', width: 35 },
+        { header: 'Mã lớp', key: 'classCode', width: 14 },
+        { header: 'Công ty / Đơn vị', key: 'company', width: 28 },
+        { header: 'Địa chỉ', key: 'address', width: 30 },
+        { header: 'Nhóm', key: 'group', width: 10 },
+      ];
+
+      // Style header row
+      const headerRow = ws.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      headerRow.height = 28;
+      headerRow.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+        cell.border = {
+          top: { style: 'thin' }, left: { style: 'thin' },
+          bottom: { style: 'thin' }, right: { style: 'thin' }
+        };
+      });
+
+      // Add data rows
+      filteredStudents.forEach((s, idx) => {
+        const row = ws.addRow({
+          stt: idx + 1,
+          studentCode: s.studentCode || '',
+          fullName: s.fullName || '',
+          gender: s.gender || '',
+          dob: s.dob ? formatDate(s.dob) : '',
+          pob: (s as any).pob || '',
+          ethnicity: (s as any).ethnicity || '',
+          nationality: (s as any).nationality || '',
+          phone: s.phone || '',
+          idNumber: (s as any).idNumber || '',
+          className: s.className || '',
+          classCode: s.classCode || '',
+          company: s.company || '',
+          address: (s as any).address || '',
+          group: s.group || '',
+        });
+
+        row.height = 20;
+        row.eachCell((cell, colNum) => {
+          cell.border = {
+            top: { style: 'thin' }, left: { style: 'thin' },
+            bottom: { style: 'thin' }, right: { style: 'thin' }
+          };
+          cell.alignment = { vertical: 'middle', wrapText: false };
+          // Center: STT, Giới tính, Ngày sinh, Mã lớp, Nhóm
+          if ([1, 4, 5, 12, 15].includes(colNum)) {
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          }
+          // Alternating row color
+          if (idx % 2 === 1) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+          }
+        });
+      });
+
+      // Auto-fit (freeze header)
+      ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
+
+      const today = new Date();
+      const dateStr = `${String(today.getDate()).padStart(2,'0')}${String(today.getMonth()+1).padStart(2,'0')}${today.getFullYear()}`;
+      const fileName = selectedClassFilter
+        ? `DanhSach_${selectedClassFilter.replace(/[^a-zA-Z0-9]/g, '_')}_${dateStr}.xlsx`
+        : `DanhSach_HocVien_${dateStr}.xlsx`;
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Export Excel failed:', e);
+      alert('Lỗi khi xuất Excel. V vui lòng thử lại.');
+    }
+  };
+
   // --- Duplicate check helper (called on CCCD blur / class change) ---
   const runDuplicateCheck = async (idNumber: string, classId: string, excludeId?: string | null) => {
     setDuplicateWarning(null);
@@ -220,8 +323,8 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   };
 
   // Handle class selection change
-  const handleClassChange = (className: string) => {
-    const selectedClass = availableClasses.find(c => c.name === className);
+  const handleClassChange = (className: string, selectedClass?: any) => {
+    if (!selectedClass) selectedClass = availableClasses.find(c => c.name === className);
     // After normalizeStrapiList: .id = documentId (string), .strapiId = numeric id
     // Strapi relation needs numeric id (strapiId) to avoid locale:null error
     const numericId = selectedClass ? String(selectedClass.strapiId || '') : '';
@@ -241,7 +344,23 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
     }
   };
 
-  // Handle ID Number change (syncs with studentCode)
+  const fetchClassesForDropdown = async (search: string): Promise<Option[]> => {
+    let url = `${COLLECTIONS.CLASSES}?pagination[pageSize]=20`;
+    if (search) {
+       url += `&filters[$or][0][name][$containsi]=${encodeURIComponent(search)}&filters[$or][1][code][$containsi]=${encodeURIComponent(search)}`;
+    } else {
+       url += `&sort[0]=createdAt:desc`;
+    }
+    const data = await fetchCategory(url);
+    if (!data) return [];
+    return data.map((c: any) => ({
+      id: c.name,
+      label: c.name ? `${c.code ? c.code + ' - ' : ''}${c.name}` : 'Không tên',
+      data: c
+    }));
+  };
+
+  // Xóa prefillDocs khi CCCD thay đổi
   const handleIdNumberChange = (val: string) => {
     const cleanedVal = val.replace(/\D/g, '');
     if (cleanedVal.length <= 12) {
@@ -250,13 +369,73 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         idNumber: cleanedVal,
         studentCode: cleanedVal
       });
-      // Clear warning when user changes CCCD
       setDuplicateWarning(null);
+      if (!editingId) {
+        setStudentPhoto(null);
+        setPrefillDocs({ front: null, back: null }); // Xóa docs cũ khi đổi CCCD
+      }
     }
+  };
+
+  // Hàm lõi: lấy ảnh 3x4 mới nhất + CCCD mặt trước/sau theo số CCCD
+  // Dùng chung cho cả tạo mới và edit (khi record thiếu ảnh)
+  const fetchPhotoAndDocsByIdNumber = async (idNumber: string, currentPhoto: string | null) => {
+    if (!idNumber || idNumber.length < 9) return;
+    try {
+      const token = localStorage.getItem('jwt_token') || '';
+
+      // 1. Lấy ảnh 3x4 mới nhất theo CCCD (chỉ nếu chưa có ảnh)
+      if (!currentPhoto) {
+        // Chỉ tìm ảnh từ records tạo trong 5 năm gần nhất
+        const fiveYearsAgo = new Date();
+        fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+        const photoRes = await fetch(
+          `/api/students?filters[id_number][$eq]=${idNumber}&filters[createdAt][$gte]=${fiveYearsAgo.toISOString()}&fields[0]=photo&sort=createdAt:desc&pagination[limit]=20&publicationState=preview`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (photoRes.ok) {
+          const json = await photoRes.json();
+          // Lấy ảnh có giá trị (khác null/rỗng) đầu tiên trong tất cả records cùng CCCD
+          const allRecords: any[] = json?.data || [];
+          const latestPhoto = allRecords
+            .map((r: any) => r.photo || r.attributes?.photo)
+            .find((p: any) => !!p) || null;
+          if (latestPhoto) setStudentPhoto(latestPhoto);
+        }
+      }
+
+      // 2. Lấy CCCD mặt trước/sau gần nhất
+      const docsRes = await fetch(
+        `/api/student-documents/by-id-number?id_number=${encodeURIComponent(idNumber)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (docsRes.ok) {
+        const docsJson = await docsRes.json();
+        const docs: any[] = docsJson?.data || [];
+        const front = docs.find((d: any) => d.name === 'CCCD Mặt trước')?.url || null;
+        const back  = docs.find((d: any) => d.name === 'CCCD Mặt sau')?.url  || null;
+        setPrefillDocs({ front, back });
+      }
+    } catch (_) {
+      // Bỏ qua lỗi — không bắt buộc phải có
+    }
+  };
+
+  // Tự động lấy ảnh 3x4 Mới nhất + file CCCD đính kèm theo CCCD khi nhập form mới
+  // → Học viên đăng ký lớp mới không cần upload lại ảnh lẫn hồ sơ
+  // → Record cũ / quyết định cũ KHÔNG bị ảnh hưởng
+  const fetchLatestPhotoByIdNumber = async (idNumber: string) => {
+    if (!idNumber || idNumber.length < 9 || editingId) return; // Chỉ áp dụng khi tạo mới
+    if (studentPhoto) return; // Đã có ảnh (từ prefilledStudent) thì giữ nguyên
+    await fetchPhotoAndDocsByIdNumber(idNumber, studentPhoto);
   };
 
   // Real-time check on CCCD blur
   const handleIdNumberBlur = () => {
+    // Tự động load ảnh gần nhất khi CCCD đủ 12 số và đang tạo mới
+    if (formData.idNumber && formData.idNumber.length === 12 && !editingId) {
+      fetchLatestPhotoByIdNumber(formData.idNumber);
+    }
     if (formData.idNumber && formData.classId) {
       // classId in formData = numeric strapiId OR documentId from existing student
       // Find class by matching either strapiId or documentId
@@ -270,16 +449,34 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
 
   const startCamera = async (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    
+    // Kiểm tra API có hỗ trợ không (thường bị chặn nếu dùng IP mạng LAN qua HTTP thay vì HTTPS/localhost)
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert("Lỗi: Trình duyệt không hỗ trợ Camera hoặc tính năng bị chặn vì bạn đang không dùng HTTPS/localhost.");
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }
       });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        setIsCameraLive(true);
+      setIsCameraLive(true);
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }, 50);
+    } catch (err: any) {
+      console.error("Lỗi Camera:", err);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        alert("Lỗi: Bạn đã từ chối quyền truy cập Camera. Vui lòng cấp quyền trong cài đặt trình duyệt và thử lại.");
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        alert("Lỗi: Không tìm thấy thiết bị Camera nào trên máy của bạn.");
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        alert("Lỗi: Camera đang bị phần mềm khác sử dụng (ví dụ: Zalo, Zoom...). Vui lòng tắt và thử lại.");
+      } else {
+        alert("Không thể truy cập Camera: " + (err.message || err.name));
       }
-    } catch (err) {
-      alert("Không thể truy cập Camera. Vui lòng kiểm tra quyền trình duyệt.");
     }
   };
 
@@ -297,9 +494,8 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       const canvas = canvasRef.current;
       const context = canvas.getContext('2d');
       if (context) {
-        // Định dạng ảnh chuẩn 3x4 (300px x 400px hoặc 600px x 800px)
-        canvas.width = 600;
-        canvas.height = 800;
+        canvas.width = 900;
+        canvas.height = 1200;
         const video = videoRef.current;
 
         const videoWidth = video.videoWidth;
@@ -317,10 +513,98 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
           sY = (videoHeight - sH) / 2;
         }
 
-        context.drawImage(video, sX, sY, sW, sH, 0, 0, 600, 800);
+        context.drawImage(video, sX, sY, sW, sH, 0, 0, 900, 1200);
         setStudentPhoto(canvas.toDataURL('image/jpeg', 0.9));
         stopCamera();
       }
+    }
+  };
+
+  const compressAndResizeImage = (base64Str: string, maxWidth: number = 900, maxHeight: number = 1200, quality: number = 0.9): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = base64Str;
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        
+        if (width > maxWidth || height > maxHeight) {
+          const ratio = Math.min(maxWidth / width, maxHeight / height);
+          width = width * ratio;
+          height = height * ratio;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } else {
+          resolve(base64Str);
+        }
+      };
+      img.onerror = () => resolve(base64Str);
+    });
+  };
+
+  const handleProcessAIPhoto = async () => {
+    if (!studentPhoto) return;
+    setIsProcessingAI(true);
+    try {
+      const token = localStorage.getItem('jwt_token') || '';
+      const res = await fetch('/api/students/process-photo', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}` 
+        },
+        body: JSON.stringify({ 
+          originalImage: studentPhoto, 
+          gender: formData.gender 
+        })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) {
+        const errorMsg = data.error?.message || (typeof data.error === 'string' ? data.error : '') || data.message || 'Lỗi xử lý ảnh';
+        throw new Error(errorMsg);
+      }
+      
+      if (data.processedImage) {
+        const compressed = await compressAndResizeImage(data.processedImage, 900, 1200, 0.9);
+        setStudentPhoto(compressed);
+      }
+    } catch (error: any) {
+      console.error(error);
+      alert('Không thể xử lý ảnh bằng AI: ' + (error.message || 'Lỗi không xác định'));
+    } finally {
+      setIsProcessingAI(false);
+    }
+  };
+
+  const handleDownloadPhoto = async () => {
+    if (!studentPhoto) return;
+    try {
+      const response = await fetch(studentPhoto);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      const fileName = formData.fullName 
+        ? `${formData.fullName.trim().replace(/\s+/g, '_')}_3x4.jpg` 
+        : 'Anh_Hoc_Vien_3x4.jpg';
+        
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error downloading photo:", error);
+      alert("Không thể tải ảnh xuống.");
     }
   };
 
@@ -348,6 +632,11 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
     });
     setStudentPhoto(student.photo || null);
     setIsFormOpen(true);
+
+    // Nếu record thiếu ảnh → tự động lấy ảnh mới nhất từ CCCD (các lớp học khác cùng người)
+    if (!student.photo && student.idNumber && student.idNumber.length >= 9) {
+      fetchPhotoAndDocsByIdNumber(student.idNumber, null);
+    }
   };
 
   const handleDobChange = (dob: string) => {
@@ -371,13 +660,13 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
   };
 
   const handleSave = async () => {
-    if (!formData.fullName || !formData.group || !formData.idNumber || !formData.dob) {
-      alert('Vui lòng nhập đầy đủ: Họ tên, Ngày sinh, Lớp học và Số CMND/CCCD!');
+    if (!formData.fullName || !formData.group || !formData.idNumber || !formData.dob || !formData.address) {
+      alert('Vui lòng nhập đầy đủ: Họ tên, Ngày sinh, Lớp học, Số CMND/CCCD và Địa chỉ thường trú!');
       return;
     }
 
     if (formData.idNumber.length !== 12) {
-      alert('Vui lòng nhập chính xác 12 số CCCD/CMND!');
+      alert('V vui lòng nhập chính xác 12 số CCCD/CMND!');
       return;
     }
 
@@ -434,40 +723,42 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       }
     }
 
-    // 2. Check 5-year rule from previous recognition decisions
-    const conflictingDecision = allDecisions.find((d: any) => {
-      if (d.type !== 'RECOGNITION') return false;
+    // 2. Check 5-year rule from previous recognition decisions dynamically
+    try {
+      const token = localStorage.getItem('jwt_token') || '';
+      const decRes = await fetch(`/api/class-decisions?filters[type][$eq]=RECOGNITION&filters[students][id_number][$eq]=${currentIdNumber}&populate[school_class]=*`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (decRes.ok) {
+        const decJson = await decRes.json();
+        const decisions = decJson?.data || [];
+        const conflictingDecision = decisions.find((d: any) => {
+          const decClass = d.school_class || d.attributes?.school_class;
+          const decClassId = String(decClass?.documentId || decClass?.id || '');
+          const decClassName = (decClass?.name || decClass?.attributes?.name || d.class_name || '').trim().toLowerCase();
+          return (currentClassId && decClassId === currentClassId) || (decClassName === currentClassName);
+        });
 
-      const decClass = d.school_class?.data || d.school_class;
-      const decClassId = String(decClass?.documentId || decClass?.id || '');
-      const decClassName = (decClass?.name || d.class_name || '').trim().toLowerCase();
+        if (conflictingDecision) {
+          const signedDateStr = conflictingDecision.signed_date || conflictingDecision.signedDate || conflictingDecision.attributes?.signed_date;
+          if (signedDateStr) {
+            const signedDate = new Date(signedDateStr);
+            const now = new Date();
+            const diffYears = (now.getTime() - signedDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
 
-      // Match class by ID (preferred) or Name
-      const isSameClass = (currentClassId && decClassId === currentClassId) || (decClassName === currentClassName);
-      if (!isSameClass) return false;
-
-      const studentsInDec = d.students?.data || d.students || [];
-      return studentsInDec.some((s: any) =>
-        s.student_code === currentIdNumber ||
-        s.id_number === currentIdNumber ||
-        s.card_number === currentIdNumber
-      );
-    });
-
-    if (conflictingDecision) {
-      const signedDateStr = conflictingDecision.signed_date || conflictingDecision.signedDate;
-      if (signedDateStr) {
-        const signedDate = new Date(signedDateStr);
-        const now = new Date();
-        const diffYears = (now.getTime() - signedDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-
-        if (diffYears < 5) {
-          const proceed = window.confirm(`THÔNG BÁO: Học viên này ĐÃ CÓ CHỨNG CHỈ NÀY RỒI.\n(Được cấp theo Quyết định số ${conflictingDecision.decision_number || conflictingDecision.number} ngày ${signedDateStr})\n\nBạn có chắc chắn muốn đăng ký cho học viên này học lại lớp này (trong vòng 5 năm) không?`);
-          if (!proceed) return;
+            if (diffYears < 5) {
+              const decisionNumber = conflictingDecision.decision_number || conflictingDecision.number || conflictingDecision.attributes?.decision_number;
+              const proceed = window.confirm(`THÔNG BÁO: Học viên này ĐÃ CÓ CHỨNG CHỈ NÀY RỒI.\n(Được cấp theo Quyết định số ${decisionNumber || 'N/A'} ngày ${signedDateStr})\n\nBạn có chắc chắn muốn đăng ký cho học viên này học lại lớp này (trong vòng 5 năm) không?`);
+              if (!proceed) return;
+            }
+          }
         }
       }
+    } catch (e) {
+      console.warn('Failed to check 5-year rule', e);
     }
-    // -----------------------------------------------------
+
+
 
     // Prepare Payload
     const nameParts = formData.fullName.trim().split(' ');
@@ -526,27 +817,10 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         } else {
           const newStudent = await createCategory(COLLECTIONS.STUDENTS, payload);
 
-          // --- Copy documents from source student ("+ Đăng ký lớp mới" flow) ---
-          if (prefilledStudentDocs.length > 0 && newStudent) {
-            const newStudentId = newStudent.id || newStudent.documentId;
-            if (newStudentId) {
-              for (const doc of prefilledStudentDocs) {
-                if (doc.url && doc.name) {
-                  try {
-                    await createCategory(COLLECTIONS.STUDENT_DOCUMENTS, {
-                      name: doc.name,
-                      url: doc.url,
-                      type: doc.type || 'application/pdf',
-                      student: newStudentId,
-                    });
-                  } catch (docErr) {
-                    console.warn('Failed to copy document:', doc.name, docErr);
-                  }
-                }
-              }
-            }
-            setPrefilledStudentDocs([]);
-          }
+          // --- KHÔNG copy documents khi đăng ký lớp mới ---
+          // Tài liệu được chia sẻ qua số CCCD (id_number), không gắn riêng với từng student record.
+          // Khi xem tài liệu, frontend sẽ load theo CCCD để hiển thị chung cho mọi lớp.
+          setPrefilledStudentDocs([]);
           // -------------------------------------------------------------------
         }
         alert(editingId ? 'Cập nhật thành công!' : 'Thêm mới thành công!');
@@ -611,10 +885,20 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
             type: file.type,
             date: new Date().toLocaleDateString('vi-VN'),
             url: finalDocUrl,
-            student: studentObj?.strapiId || studentId // Use numeric ID for relation
+            student: studentObj?.strapiId || studentId, // Use numeric ID for relation
+            id_number: (studentObj as any)?.idNumber || (studentObj as any)?.studentCode || '' // CCCD — dùng để chia sẻ docs qua nhiều lớp
           };
 
-          const savedDoc = await createCategory(COLLECTIONS.STUDENT_DOCUMENTS, payload);
+          // Gọi API replace-or-create: nếu đã có doc cùng tên + CCCD → cập nhật URL
+          // Tránh tạo file thừa trên ổ đĩa
+          const token = localStorage.getItem('jwt_token') || '';
+          const replaceRes = await fetch('/api/student-documents/replace-or-create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(payload)
+          });
+          const replaceJson = await replaceRes.json();
+          const savedDoc = replaceJson?.data || null;
 
           if (savedDoc) {
             setStudents(prev => prev.map(s => {
@@ -688,7 +972,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       <title>Phiếu đăng ký học</title>
       <style>
         @page {
-            size: A5 portrait;
+            size: A5 landscape;
             margin: 0;
         }
         body {
@@ -1004,49 +1288,31 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 col-span-2">
-                    <label className="w-32 flex-shrink-0 text-left pl-4 text-[12px] text-slate-600 font-medium whitespace-nowrap">Nơi sinh:</label>
-                    <select
-                      value={formData.pob}
-                      onChange={e => setFormData({ ...formData, pob: e.target.value })}
-                      className="flex-1 border border-slate-300 rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none bg-white"
-                    >
-                      <option value="">--Chọn nơi sinh--</option>
-                      <option value="Hà Nội">Hà Nội</option>
-                      <option value="Huế">Huế</option>
-                      <option value="Lai Châu">Lai Châu</option>
-                      <option value="Điện Biên">Điện Biên</option>
-                      <option value="Sơn La">Sơn La</option>
-                      <option value="Lạng Sơn">Lạng Sơn</option>
-                      <option value="Quảng Ninh">Quảng Ninh</option>
-                      <option value="Thanh Hoá">Thanh Hoá</option>
-                      <option value="Nghệ An">Nghệ An</option>
-                      <option value="Hà Tĩnh">Hà Tĩnh</option>
-                      <option value="Cao Bằng">Cao Bằng</option>
-                      <option value="Tuyên Quang">Tuyên Quang</option>
-                      <option value="Lào Cai">Lào Cai</option>
-                      <option value="Thái Nguyên">Thái Nguyên</option>
-                      <option value="Phú Thọ">Phú Thọ</option>
-                      <option value="Bắc Ninh">Bắc Ninh</option>
-                      <option value="Hưng Yên">Hưng Yên</option>
-                      <option value="Hải Phòng">Hải Phòng</option>
-                      <option value="Ninh Bình">Ninh Bình</option>
-                      <option value="Quảng Trị">Quảng Trị</option>
-                      <option value="Đà Nẵng">Đà Nẵng</option>
-                      <option value="Quảng Ngãi">Quảng Ngãi</option>
-                      <option value="Gia Lai">Gia Lai</option>
-                      <option value="Khánh Hòa">Khánh Hòa</option>
-                      <option value="Lâm Đồng">Lâm Đồng</option>
-                      <option value="Đắk Lắk">Đắk Lắk</option>
-                      <option value="TP. Hồ Chí Minh">TP. Hồ Chí Minh</option>
-                      <option value="Đồng Nai">Đồng Nai</option>
-                      <option value="Tây Ninh">Tây Ninh</option>
-                      <option value="Cần Thơ">Cần Thơ</option>
-                      <option value="Vĩnh Long">Vĩnh Long</option>
-                      <option value="Đồng Tháp">Đồng Tháp</option>
-                      <option value="Cà Mau">Cà Mau</option>
-                      <option value="An Giang">An Giang</option>
-                    </select>
+                  <div className={`flex gap-2 col-span-2 ${(formData.pob !== '' && !PROVINCES_LIST.includes(formData.pob)) ? 'items-start' : 'items-center'}`}>
+                    <label className={`w-32 flex-shrink-0 text-left pl-4 text-[12px] text-slate-600 font-medium whitespace-nowrap ${(formData.pob !== '' && !PROVINCES_LIST.includes(formData.pob)) ? 'pt-1.5' : ''}`}>Nơi sinh:</label>
+                    <div className="flex-1 flex flex-col gap-1.5">
+                      <select
+                        value={(formData.pob !== '' && !PROVINCES_LIST.includes(formData.pob)) ? 'other' : formData.pob}
+                        onChange={e => setFormData({ ...formData, pob: e.target.value === 'other' ? 'Khác' : e.target.value })}
+                        className="w-full border border-slate-300 rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none bg-white"
+                      >
+                        <option value="">--Chọn nơi sinh--</option>
+                        {PROVINCES_LIST.map(province => (
+                          <option key={province} value={province}>{province}</option>
+                        ))}
+                        <option value="other">Khác...</option>
+                      </select>
+                      {(formData.pob !== '' && !PROVINCES_LIST.includes(formData.pob)) && (
+                        <input
+                          type="text"
+                          value={formData.pob === 'Khác' ? '' : formData.pob}
+                          onChange={e => setFormData({ ...formData, pob: e.target.value || 'Khác' })}
+                          placeholder="Nhập tên Tỉnh/Thành phố hoặc Quốc gia..."
+                          className="w-full border border-blue-300 rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none shadow-sm animate-in fade-in"
+                          autoFocus
+                        />
+                      )}
+                    </div>
                   </div>
 
                   {/* Row 3: Gender & ID */}
@@ -1104,14 +1370,15 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                   {/* Row 5: Class */}
                   <div className="flex items-center gap-2 col-span-2">
                     <label className="w-32 flex-shrink-0 text-left pl-4 text-[12px] text-slate-600 font-medium whitespace-nowrap">Lớp học<span className="text-red-500">*</span>:</label>
-                    <select
-                      value={formData.group}
-                      onChange={e => handleClassChange(e.target.value)}
-                      className="flex-1 border border-slate-300 rounded-sm px-2 py-1.5 text-[12px] focus:border-blue-500 outline-none bg-white font-medium text-blue-700"
-                    >
-                      <option value="">--Chọn lớp học--</option>
-                      {availableClasses.map(cls => <option key={cls.id} value={cls.name}>{cls.name}</option>)}
-                    </select>
+                    <div className="flex-1">
+                      <SearchableSelect
+                        value={formData.group}
+                        onChange={(val, opt) => handleClassChange(val, opt?.data)}
+                        fetchOptions={fetchClassesForDropdown}
+                        placeholder="--Chọn lớp học--"
+                        defaultLabel={formData.group || "--Chọn lớp học--"}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1123,8 +1390,9 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                 </span>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-3">
                   <div className="flex items-center gap-2 col-span-2">
-                    <label className="w-32 text-right text-[12px] text-slate-600 font-medium">Địa chỉ thường trú:</label>
+                    <label className="w-32 text-right text-[12px] text-slate-600 font-medium">Địa chỉ thường trú<span className="text-red-500">*</span>:</label>
                     <input
+                      required
                       type="text"
                       value={formData.address}
                       onChange={e => setFormData({ ...formData, address: e.target.value })}
@@ -1177,13 +1445,10 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                   title={isCameraLive ? "" : "Click để mở Webcam"}
                 >
                   {isCameraLive ? (
-                    <>
-                      <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover grayscale-[0.2]" />
-                      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                        <div className="w-full h-full border-[20px] border-black/40"></div>
-                        <div className="absolute inset-0 border-2 border-dashed border-white/50 m-2"></div>
-                      </div>
-                    </>
+                    <div className="flex flex-col items-center justify-center h-full w-full bg-slate-100">
+                      <Camera size={32} className="text-blue-400 animate-pulse mb-2" />
+                      <span className="text-[11px] font-medium text-slate-500 text-center">Đang mở máy ảnh...</span>
+                    </div>
                   ) : studentPhoto ? (
                     <img src={studentPhoto} className="w-full h-full object-cover" />
                   ) : (
@@ -1191,35 +1456,14 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                   )}
 
                   {!isCameraLive && (
-                    <div className="absolute inset-0 bg-blue-600/10 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                    <div className="absolute inset-0 bg-blue-600/10 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer" onClick={studentPhoto ? () => fileInputRef.current?.click() : startCamera}>
                       <div className="bg-white/90 p-3 rounded-full shadow-lg">
                         <Camera size={28} className="text-blue-600" />
                       </div>
                     </div>
                   )}
-
-                  {isCameraLive && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-end pb-4 gap-2 bg-gradient-to-t from-black/60 via-transparent to-transparent animate-in fade-in duration-300">
-                      <div className="flex gap-4">
-                        <button
-                          onClick={capturePhoto}
-                          className="p-3 bg-white rounded-full text-blue-600 shadow-xl hover:scale-110 active:scale-95 transition-all pointer-events-auto"
-                          title="Chụp ảnh ngay"
-                        >
-                          <Camera size={24} />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); stopCamera(); }}
-                          className="p-3 bg-white/20 backdrop-blur-md rounded-full text-white shadow hover:bg-red-600 transition-all pointer-events-auto"
-                          title="Hủy chụp"
-                        >
-                          <X size={24} />
-                        </button>
-                      </div>
-                      <span className="text-[10px] text-white/80 font-bold uppercase tracking-wider">Căn giữa khuôn mặt</span>
-                    </div>
-                  )}
                 </div>
+
 
                 <div className="mt-3 flex flex-col gap-2 w-full max-w-[150px]">
                   <button
@@ -1240,52 +1484,94 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                     <Upload size={14} />
                     Tải ảnh lên
                   </button>
+
+                  {studentPhoto && !isCameraLive && (
+                    <button
+                      onClick={(e) => { e.preventDefault(); handleProcessAIPhoto(); }}
+                      disabled={isProcessingAI}
+                      className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-bold transition-all border shadow-sm ${
+                        isProcessingAI 
+                          ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                          : 'bg-gradient-to-r from-purple-50 to-fuchsia-50 text-purple-600 border-purple-200 hover:from-purple-100 hover:to-fuchsia-100 shadow-purple-100/50'
+                      }`}
+                    >
+                      {isProcessingAI ? (
+                        <>
+                          <RefreshCw size={14} className="animate-spin" />
+                          Đang xử lý AI...
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-sm leading-none">✨</span>
+                          Xử lý AI (Thay đồ)
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  {studentPhoto && !isCameraLive && (
+                    <button
+                      onClick={(e) => { e.preventDefault(); handleDownloadPhoto(); }}
+                      className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-50 text-green-600 rounded border border-green-200 text-[11px] font-bold hover:bg-green-100 transition-all shadow-sm"
+                    >
+                      <Download size={14} />
+                      Tải ảnh xuống
+                    </button>
+                  )}
                 </div>
 
                 <input type="file" ref={fileInputRef} hidden onChange={e => {
                   const file = e.target.files?.[0];
                   if (file) {
                     const r = new FileReader();
-                    r.onload = () => {
-                      setStudentPhoto(r.result as string);
+                    r.onload = async () => {
+                      const compressed = await compressAndResizeImage(r.result as string, 900, 1200, 0.9);
+                      setStudentPhoto(compressed);
                       stopCamera();
                     };
                     r.readAsDataURL(file);
                   }
                 }} />
 
-                {/* CCCD SECTION IN EDIT FORM */}
+                {/* CCCD SECTION IN FORM (cả tạo mới lẫn chỉnh sửa) */}
                 <div className="mt-6 w-full border-t border-slate-100 pt-4">
                   <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-3">Căn cước công dân (Hồ sơ)</span>
+                  {!editingId && (prefillDocs.front || prefillDocs.back) && (
+                    <div className="mb-2 px-2 py-1.5 bg-green-50 border border-green-200 rounded text-[10px] text-green-700 flex items-center gap-1">
+                      <CheckCircle2 size={11} /> Đã tìm thấy CCCD cũ — hiển thị bên dưới. Nhấn "Ảnh mới" nếu muốn cập nhật.
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     {/* Front */}
                     <div className="space-y-1">
                       <div className="flex justify-between items-center">
                         <span className="text-[10px] text-slate-400 font-medium">Mặt trước:</span>
-                        {editingId && (
-                           <button 
-                             onClick={(e) => handleTriggerUpload(editingId, e, 'CCCD Mặt trước')}
-                             className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-100 transition-colors flex items-center gap-1"
-                           >
-                             <Upload size={10} /> Tải lên
-                           </button>
-                        )}
+                        <button
+                          onClick={(e) => handleTriggerUpload(editingId || 'new', e, 'CCCD Mặt trước')}
+                          className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-100 transition-colors flex items-center gap-1"
+                        >
+                          <Upload size={10} /> {!editingId && prefillDocs.front ? 'Ảnh mới' : 'Tải lên'}
+                        </button>
                       </div>
-                      <div 
+                      <div
                         className="aspect-[1.58/1] bg-slate-100 rounded border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-300 transition-all relative group"
                         onClick={() => {
-                          const doc = editingId ? students.find(s => s.id === editingId)?.documents?.find(d => d.name === 'CCCD Mặt trước') : null;
-                          if (doc) setZoomedImage(doc.url);
+                          const url = editingId
+                            ? students.find(s => s.id === editingId)?.documents?.find(d => d.name === 'CCCD Mặt trước')?.url
+                            : prefillDocs.front;
+                          if (url) setZoomedImage(url);
                         }}
                       >
-                        {editingId && students.find(s => s.id === editingId)?.documents?.find(d => d.name === 'CCCD Mặt trước') ? (
-                          <img 
-                            src={students.find(s => s.id === editingId)?.documents?.find(d => d.name === 'CCCD Mặt trước')?.url} 
-                            className="w-full h-full object-cover" 
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px] bg-white">Chưa có ảnh</div>
-                        )}
+                        {(() => {
+                          const url = editingId
+                            ? students.find(s => s.id === editingId)?.documents?.find(d => d.name === 'CCCD Mặt trước')?.url
+                            : prefillDocs.front;
+                          return url ? (
+                            <img src={url} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px] bg-white">Chưa có ảnh</div>
+                          );
+                        })()}
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                           <Search size={16} className="text-white" />
                         </div>
@@ -1295,30 +1581,32 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                     <div className="space-y-1">
                       <div className="flex justify-between items-center">
                         <span className="text-[10px] text-slate-400 font-medium">Mặt sau:</span>
-                        {editingId && (
-                           <button 
-                             onClick={(e) => handleTriggerUpload(editingId, e, 'CCCD Mặt sau')}
-                             className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-100 transition-colors flex items-center gap-1"
-                           >
-                             <Upload size={10} /> Tải lên
-                           </button>
-                        )}
+                        <button
+                          onClick={(e) => handleTriggerUpload(editingId || 'new', e, 'CCCD Mặt sau')}
+                          className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-100 transition-colors flex items-center gap-1"
+                        >
+                          <Upload size={10} /> {!editingId && prefillDocs.back ? 'Ảnh mới' : 'Tải lên'}
+                        </button>
                       </div>
-                      <div 
+                      <div
                         className="aspect-[1.58/1] bg-slate-100 rounded border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-300 transition-all relative group"
                         onClick={() => {
-                          const doc = editingId ? students.find(s => s.id === editingId)?.documents?.find(d => d.name === 'CCCD Mặt sau') : null;
-                          if (doc) setZoomedImage(doc.url);
+                          const url = editingId
+                            ? students.find(s => s.id === editingId)?.documents?.find(d => d.name === 'CCCD Mặt sau')?.url
+                            : prefillDocs.back;
+                          if (url) setZoomedImage(url);
                         }}
                       >
-                        {editingId && students.find(s => s.id === editingId)?.documents?.find(d => d.name === 'CCCD Mặt sau') ? (
-                          <img 
-                            src={students.find(s => s.id === editingId)?.documents?.find(d => d.name === 'CCCD Mặt sau')?.url} 
-                            className="w-full h-full object-cover" 
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px] bg-white">Chưa có ảnh</div>
-                        )}
+                        {(() => {
+                          const url = editingId
+                            ? students.find(s => s.id === editingId)?.documents?.find(d => d.name === 'CCCD Mặt sau')?.url
+                            : prefillDocs.back;
+                          return url ? (
+                            <img src={url} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-slate-300 italic text-[10px] bg-white">Chưa có ảnh</div>
+                          );
+                        })()}
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                           <Search size={16} className="text-white" />
                         </div>
@@ -1337,47 +1625,119 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
     </div >
   );
 
+  // Bước 5: Load tài liệu theo CCCD — chia sẻ chung cho mọi lớp của cùng 1 người
+  const openDocsModal = async (studentId: string) => {
+    setViewingDocsStudentId(studentId);
+    const student = students.find(s => s.id === studentId);
+    const idNumber = (student as any)?.idNumber;
+    if (idNumber) {
+      setSharedDocsLoading(true);
+      try {
+        const res = await fetch(`/api/student-documents/by-id-number?id_number=${encodeURIComponent(idNumber)}`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('jwt_token') || ''}` }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const apiDocs = json.data || [];
+          if (apiDocs.length > 0) {
+            setSharedDocs(apiDocs);
+          } else {
+            setSharedDocs(student?.documents || []);
+          }
+        } else {
+          // Fallback về docs gắn với student record này
+          setSharedDocs(student?.documents || []);
+        }
+      } catch {
+        setSharedDocs(student?.documents || []);
+      } finally {
+        setSharedDocsLoading(false);
+      }
+    } else {
+      // Không có CCCD → dùng docs gốc
+      setSharedDocs(student?.documents || []);
+    }
+  };
+
+  const handleOpenDoc = (doc: any) => {
+    if (!doc.url) return;
+    const isImage = doc.url.match(/\.(jpg|jpeg|png|webp|gif|bmp)(\?.*)?$/i) || doc.type?.startsWith('image/');
+    if (isImage) {
+      setZoomedImage(doc.url);
+    } else {
+      window.open(doc.url, '_blank');
+    }
+  };
+
   const renderDocsModal = () => {
     const student = students.find(s => s.id === viewingDocsStudentId);
-    if (!student || !student.documents) return null;
+    if (!student) return null;
+    const docsToShow = sharedDocs;
 
     return (
       <div className="fixed inset-0 bg-black/50 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
         <div className="bg-white w-full max-w-md rounded-lg shadow-xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200">
           <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
-            <h3 className="font-bold text-slate-700 text-sm">Hồ sơ đính kèm ({student.documents.length})</h3>
-            <button onClick={() => setViewingDocsStudentId(null)} className="text-slate-400 hover:text-red-500"><X size={18} /></button>
+            <div>
+              <h3 className="font-bold text-slate-700 text-sm">Hồ sơ đính kèm ({sharedDocsLoading ? '...' : docsToShow.length})</h3>
+              {(student as any)?.idNumber && (
+                <p className="text-[10px] text-slate-400 mt-0.5">CCCD: {(student as any).idNumber} — {student.fullName}</p>
+              )}
+            </div>
+            <button onClick={() => { setViewingDocsStudentId(null); setSharedDocs([]); }} className="text-slate-400 hover:text-red-500"><X size={18} /></button>
           </div>
           <div className="max-h-[60vh] overflow-y-auto p-2">
-            {student.documents.length === 0 ? (
+            {sharedDocsLoading ? (
+              <p className="text-center text-slate-400 py-8 text-xs animate-pulse">Đang tải hồ sơ...</p>
+            ) : docsToShow.length === 0 ? (
               <p className="text-center text-slate-400 py-8 text-xs italic">Chưa có hồ sơ nào</p>
             ) : (
               <div className="space-y-2">
-                {student.documents.map((doc, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-md hover:border-blue-200 hover:shadow-sm group transition-all">
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <div className="w-8 h-8 rounded bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
-                        <FileText size={16} />
+                {docsToShow.map((doc, idx) => {
+                  const isImage = doc.url?.match(/\.(jpg|jpeg|png|webp|gif|bmp)(\?.*)?$/i) || doc.type?.startsWith('image/');
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-md hover:border-blue-300 hover:shadow-sm group transition-all cursor-pointer"
+                      onClick={() => handleOpenDoc(doc)}
+                    >
+                      <div className="flex items-center gap-3 overflow-hidden flex-1 mr-2">
+                        <div className="w-9 h-9 rounded bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-100 transition-colors">
+                          {isImage ? <ImageIcon size={18} /> : <FileText size={18} />}
+                        </div>
+                        <div className="flex flex-col overflow-hidden">
+                          <span className="text-sm font-medium text-slate-700 truncate group-hover:text-blue-600 transition-colors" title={doc.name}>
+                            {doc.name}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            {doc.date} • {doc.type?.split('/')?.[1]?.toUpperCase() || (isImage ? 'IMAGE' : 'FILE')}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex flex-col overflow-hidden">
-                        <span className="text-sm font-medium text-slate-700 truncate" title={doc.name}>{doc.name}</span>
-                        <span className="text-[10px] text-slate-400">{doc.date} • {doc.type?.split('/')?.[1]?.toUpperCase() || 'FILE'}</span>
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => handleOpenDoc(doc)}
+                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                          title={isImage ? "Xem ảnh" : "Mở file"}
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <button 
+                          onClick={() => downloadFile(doc.url, doc.name)} 
+                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" 
+                          title="Tải xuống"
+                        >
+                          <Download size={16} />
+                        </button>
                       </div>
                     </div>
-                    <button 
-                      onClick={() => downloadFile(doc.url, doc.name)} 
-                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" 
-                      title="Tải xuống"
-                    >
-                      <Upload size={16} className="rotate-180" />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
           <div className="bg-slate-50 border-t border-slate-200 p-3 flex justify-end">
-            <button onClick={() => setViewingDocsStudentId(null)} className="px-4 py-1.5 bg-white border border-slate-300 rounded text-xs font-bold text-slate-600 hover:bg-slate-100">Đóng</button>
+            <button onClick={() => { setViewingDocsStudentId(null); setSharedDocs([]); }} className="px-4 py-1.5 bg-white border border-slate-300 rounded text-xs font-bold text-slate-600 hover:bg-slate-100">Đóng</button>
           </div>
         </div>
       </div>
@@ -1448,7 +1808,7 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
           </select>
         </div>
         <div className="flex gap-2 mr-2">
-          <button className="px-4 py-1.5 bg-slate-50 text-slate-700 rounded border border-slate-300 hover:bg-slate-100 transition-all flex items-center gap-2 text-[12px] font-bold shadow-sm"><FileSpreadsheet size={16} /> Export Excel</button>
+          <button onClick={handleExportExcel} className="px-4 py-1.5 bg-slate-50 text-slate-700 rounded border border-slate-300 hover:bg-slate-100 transition-all flex items-center gap-2 text-[12px] font-bold shadow-sm"><FileSpreadsheet size={16} /> Export Excel</button>
           <button onClick={loadData} className="px-4 py-1.5 bg-[#54a0ff] text-white rounded border border-[#2e86de] hover:brightness-105 transition-all flex items-center gap-2 text-[12px] font-bold shadow-sm"><RefreshCw size={16} /> Tải lại</button>
           <button onClick={() => { setEditingId(null); setFormData({ studentCode: '', fullName: '', dob: '', pob: '', ethnicity: '', phone: '', idNumber: '', group: '', classCode: '', classId: '', nationality: 'Việt Nam', address: '', company: '', gender: 'Nam', cardNumber: '', ['notes' as any]: '' } as any); setStudentPhoto(null); setIsFormOpen(true); }} className="px-4 py-1.5 bg-[#54a0ff] text-white rounded border border-[#2e86de] hover:brightness-105 transition-all flex items-center gap-2 text-[12px] font-bold shadow-sm"><Plus size={16} /> Thêm mới</button>
         </div>
@@ -1495,11 +1855,13 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
                     <button onClick={(e) => handleTriggerUpload(s.id, e)} className="text-slate-400 hover:text-blue-600 transition-colors bg-slate-50 p-1.5 rounded-full hover:bg-blue-50" title="Tải hồ sơ lên">
                       <Upload size={14} className="mx-auto" />
                     </button>
-                    {s.documents && s.documents.length > 0 && (
-                      <span className="text-[10px] bg-green-100 text-green-700 px-1.5 rounded-full font-bold cursor-pointer hover:underline" onClick={(e) => { e.stopPropagation(); setViewingDocsStudentId(s.id); }}>
-                        {s.documents.length} file
-                      </span>
-                    )}
+                    <span
+                      className="text-[10px] bg-blue-50 text-blue-600 px-1.5 rounded-full font-bold cursor-pointer hover:underline hover:bg-blue-100 transition-colors"
+                      onClick={(e) => { e.stopPropagation(); openDocsModal(s.id); }}
+                      title="Xem hồ sơ đính kèm"
+                    >
+                      {s.documents && s.documents.length > 0 ? `${s.documents.length} file` : 'Xem HS'}
+                    </span>
                   </div>
                 </td>
                 <td className="border-r px-3 py-1.5 text-center">
@@ -1577,6 +1939,81 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
         </div>
       </div>
       <input type="file" ref={docInputRef} hidden onChange={handleFileChange} />
+
+      {/* Camera Modal Overlay */}
+      {isCameraLive && (
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-[550px] bg-black sm:rounded-3xl overflow-hidden shadow-2xl shadow-blue-900/20 border border-slate-800 flex flex-col">
+            {/* Header */}
+            <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/80 to-transparent flex justify-between items-center pointer-events-none">
+              <h3 className="text-white font-medium text-lg drop-shadow-md">Chụp ảnh 3x4</h3>
+              <button 
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); stopCamera(); }}
+                className="p-2 bg-black/40 hover:bg-red-500/80 rounded-full text-white backdrop-blur-md transition-all pointer-events-auto"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            {/* Video Container */}
+            <div className="relative w-full aspect-[3/4] bg-slate-900 flex items-center justify-center overflow-hidden">
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
+                className="w-full h-full object-cover transform scale-x-[-1]" 
+              />
+              
+              {/* Overlay Passport Frame */}
+              <div className="absolute inset-0 pointer-events-none">
+                <svg className="w-full h-full" preserveAspectRatio="none">
+                  <defs>
+                    <mask id="face-hole">
+                      <rect width="100%" height="100%" fill="white" />
+                      <ellipse cx="50%" cy="42%" rx="28%" ry="33%" fill="black" />
+                    </mask>
+                  </defs>
+                  <rect width="100%" height="100%" fill="rgba(0,0,0,0.65)" mask="url(#face-hole)" />
+                  <ellipse cx="50%" cy="42%" rx="28%" ry="33%" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeDasharray="8 8" />
+                  
+                  {/* Shoulders Guide */}
+                  <path d="M 15% 100% Q 50% 65% 85% 100%" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" strokeDasharray="4 4" />
+                </svg>
+                
+                <div className="absolute bottom-28 left-0 right-0 flex justify-center">
+                  <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10">
+                    <p className="text-white/90 text-[13px] font-medium tracking-wide">
+                      Căn khuôn mặt vào vòng Oval
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Controls */}
+            <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-black via-black/90 to-transparent flex justify-center items-center gap-8">
+              <button
+                onClick={(e) => { e.preventDefault(); stopCamera(); }}
+                className="w-12 h-12 flex items-center justify-center rounded-full bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-all shadow-lg"
+              >
+                <X size={24} />
+              </button>
+              
+              <button
+                onClick={(e) => { e.preventDefault(); capturePhoto(e); }}
+                className="w-[72px] h-[72px] flex items-center justify-center rounded-full bg-white/20 p-1.5 hover:bg-white/30 transition-all group shadow-2xl"
+              >
+                <div className="w-full h-full bg-white rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(255,255,255,0.5)] group-hover:scale-95 transition-transform">
+                  <Camera size={32} className="text-blue-600" />
+                </div>
+              </button>
+              
+              <div className="w-12 h-12"></div> {/* Spacer */}
+            </div>
+          </div>
+        </div>
+      )}
+
       {renderDocsModal()}
       {renderLightbox()}
     </div>
