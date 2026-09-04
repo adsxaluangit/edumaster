@@ -18,5 +18,11 @@ export default {
         handler: 'student.findAllBrief',
         config: { auth: false },
       },
+      {
+        method: 'POST',
+        path: '/students/process-photo',
+        handler: 'student.processPhoto',
+        config: { auth: false },
+      },
     ],
   };
