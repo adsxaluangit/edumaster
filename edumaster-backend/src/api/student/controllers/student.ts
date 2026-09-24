@@ -49,7 +49,12 @@ export default factories.createCoreController('api::student.student', ({ strapi 
           return ctx.badRequest("API Key Nano Banana chưa được cấu hình. Vui lòng vào Quản lý danh mục -> Cấu hình AI.");
         }
 
-        const promptText = `Hãy biến ảnh chụp thành ảnh kiểu hộ chiếu: BẮT BUỘC giữ nguyên tuyệt đối khuôn mặt và mái tóc giống y hệt ảnh gốc, BẮT BUỘC xóa phông nền cũ và thay bằng nền màu trắng tinh, BẮT BUỘC làm sáng vùng khuôn mặt — ánh sáng studio chiếu đều và đủ sáng lên toàn bộ mặt, tông màu da tự nhiên và sáng tươi, mặt sáng rõ nét, định dạng 3x4 cm, luôn luôn mặc áo véc (${gender === 'Nữ' || gender === 'female' ? 'áo sơ mi/vest nữ công sở' : 'áo véc, sơ mi trắng và đeo cà vạt'}).`;
+        const isFemale = gender === 'Nữ' || gender === 'female' || gender === 'nu';
+        const outfitDesc = isFemale
+          ? 'mặc áo khoác véc nữ dài tay (women formal suit jacket / blazer) tối màu sang trọng khoác ngoài, bên trong là áo sơ mi trắng có cổ. Trang phục chỉ gồm đúng 2 lớp áo: áo sơ mi trắng bên trong và áo khoác véc bên ngoài. TUYỆT ĐỐI KHÔNG mặc áo gile, KHÔNG mặc áo vest lót không tay, KHÔNG áo gile len hay com-lê 3 mảnh (strictly NO waistcoat, NO gilet, NO sleeveless vest, NO 3-piece suit)'
+          : 'mặc áo khoác véc nam dài tay (men formal suit jacket / blazer) tối màu sang trọng khoác ngoài, bên trong là áo sơ mi trắng có cổ và thắt cà vạt. Trang phục chỉ gồm đúng 2 lớp áo: áo sơ mi trắng bên trong và áo khoác véc bên ngoài. TUYỆT ĐỐI KHÔNG mặc áo gile, KHÔNG mặc áo vest lót không tay, KHÔNG áo gile len hay com-lê 3 mảnh (strictly NO waistcoat, NO gilet, NO sleeveless vest, NO 3-piece suit)';
+
+        const promptText = `Hãy biến ảnh chụp thành ảnh kiểu hộ chiếu: BẮT BUỘC giữ nguyên tuyệt đối khuôn mặt và mái tóc giống y hệt ảnh gốc, BẮT BUỘC xóa phông nền cũ và thay bằng nền màu trắng tinh (pure white background), BẮT BUỘC làm sáng vùng khuôn mặt — ánh sáng studio chiếu đều và đủ sáng lên toàn bộ mặt, tông màu da tự nhiên và sáng tươi, mặt sáng rõ nét, định dạng 3x4 cm, ${outfitDesc}.`;
 
         const cleanBaseUrl = (nanoBananaBaseUrl || 'https://api.nanobananaapi.ai/api/v1').replace(/\/+$/, '');
         const generateUrl = cleanBaseUrl.endsWith('/nanobanana') ? `${cleanBaseUrl}/generate` : `${cleanBaseUrl}/nanobanana/generate`;
@@ -171,7 +176,12 @@ export default factories.createCoreController('api::student.student', ({ strapi 
         }
       }
 
-      const promptText = `Hãy biến ảnh chụp thành ảnh kiểu hộ chiếu: BẮT BUỘC giữ nguyên tuyệt đối khuôn mặt và mái tóc giống y hệt ảnh gốc (không chỉnh sửa quá đà hay làm khác đi so với ảnh gốc), BẮT BUỘC xóa phông nền cũ và thay bằng nền màu trắng tinh (pure white background), BẮT BUỘC làm sáng vùng khuôn mặt — ánh sáng studio chiếu đều và đủ sáng lên toàn bộ mặt (không để bóng tối hay vùng tối trên mặt), tông màu da tự nhiên và sáng tươi, mặt sáng rõ nét không bị tối, ánh sáng studio chuẩn ảnh thẻ, định dạng 3x4 cm, kích thước 354 × 472 pixel (ở độ phân giải 350 DPI), luôn luôn mặc áo véc, sơ mi trắng và đeo cà vạt.`;
+        const isFemaleGemini = gender === 'Nữ' || gender === 'female' || gender === 'nu';
+        const outfitDescGemini = isFemaleGemini
+          ? 'mặc áo khoác véc nữ dài tay (women formal suit jacket / blazer) tối màu sang trọng khoác ngoài, bên trong là áo sơ mi trắng có cổ. Trang phục chỉ gồm đúng 2 lớp áo: áo sơ mi trắng bên trong và áo khoác véc bên ngoài. TUYỆT ĐỐI KHÔNG mặc áo gile, KHÔNG mặc áo vest lót không tay, KHÔNG áo gile len hay com-lê 3 mảnh (strictly NO waistcoat, NO gilet, NO sleeveless vest, NO 3-piece suit)'
+          : 'mặc áo khoác véc nam dài tay (men formal suit jacket / blazer) tối màu sang trọng khoác ngoài, bên trong là áo sơ mi trắng có cổ và thắt cà vạt. Trang phục chỉ gồm đúng 2 lớp áo: áo sơ mi trắng bên trong và áo khoác véc bên ngoài. TUYỆT ĐỐI KHÔNG mặc áo gile, KHÔNG mặc áo vest lót không tay, KHÔNG áo gile len hay com-lê 3 mảnh (strictly NO waistcoat, NO gilet, NO sleeveless vest, NO 3-piece suit)';
+
+        const promptText = `Hãy biến ảnh chụp thành ảnh kiểu hộ chiếu: BẮT BUỘC giữ nguyên tuyệt đối khuôn mặt và mái tóc giống y hệt ảnh gốc (không chỉnh sửa quá đà hay làm khác đi so với ảnh gốc), BẮT BUỘC xóa phông nền cũ và thay bằng nền màu trắng tinh (pure white background), BẮT BUỘC làm sáng vùng khuôn mặt — ánh sáng studio chiếu đều và đủ sáng lên toàn bộ mặt (không để bóng tối hay vùng tối trên mặt), tông màu da tự nhiên và sáng tươi, mặt sáng rõ nét không bị tối, ánh sáng studio chuẩn ảnh thẻ, định dạng 3x4 cm, kích thước 354 × 472 pixel (ở độ phân giải 350 DPI), ${outfitDescGemini}.`;
 
       const response = await aiClient.models.generateContent({
         model: 'gemini-2.5-flash-image',
