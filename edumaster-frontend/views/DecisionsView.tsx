@@ -538,7 +538,14 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
 
   // --- Download Student Photos as ZIP (3x4 photos) ---
   const handleDownloadStudentPhotos = async () => {
-    const studentsWithPhotos = tempStudents.filter(s => s.photo && s.photo.trim() !== '');
+    // Sort by last name (last word in full name) using Vietnamese locale before zipping
+    const getLastName = (fullName: string): string => {
+      const parts = fullName.trim().split(/\s+/);
+      return parts[parts.length - 1] || fullName;
+    };
+    const studentsWithPhotos = tempStudents
+      .filter(s => s.photo && s.photo.trim() !== '')
+      .sort((a, b) => getLastName(a.fullName).localeCompare(getLastName(b.fullName), 'vi', { sensitivity: 'base' }));
 
     if (studentsWithPhotos.length === 0) {
       alert('Không có học viên nào trong danh sách có ảnh 3x4.');
