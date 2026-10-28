@@ -184,7 +184,7 @@ export default factories.createCoreController('api::student.student', ({ strapi 
         const promptText = `Dựa vào khuôn mặt trong ảnh gốc được đính kèm, hãy giữ nguyên các đặc điểm nhận dạng khuôn mặt thật của người này. Tạo một bức ảnh chân dung ảnh thẻ kích thước tỷ lệ 3x4, chụp chính diện từ ngực trở lên, phông nền màu trắng, ánh sáng studio chuyên nghiệp đều, không bóng đổ phía sau. Chủ thể ${outfitDescGemini} Biểu cảm khuôn mặt nghiêm túc tự nhiên, nhìn thẳng vào máy ảnh, chất lượng sắc nét giống ảnh chụp studio thực tế.`;
 
       const response = await aiClient.models.generateContent({
-        model: 'gemini-2.5-flash-image',
+        model: 'gemini-3.1-flash-image',
         contents: {
           parts: [
             { inlineData: { data: base64Data, mimeType: mimeType } },
