@@ -143,7 +143,36 @@ const StatisticsView: React.FC = () => {
         setFilteredData(res);
     };
 
-    const exportToExcel = () => {
+    const exportToExcel = async () => {
+        // Fetch training assignments để lấy ngày đầu tiên phân công giảng dạy
+        let firstTeachingDateMap = new Map<string, string>(); // decisionId → firstDate
+        try {
+            const assignments = await fetchCategory(
+                `${COLLECTIONS.TRAINING_ASSIGNMENTS}?populate[decision][fields][0]=documentId&populate[decision][fields][1]=id&pagination[limit]=1000`
+            );
+            if (assignments && Array.isArray(assignments)) {
+                assignments.forEach((assignment: any) => {
+                    const decisionData = assignment.decision?.data || assignment.decision;
+                    if (!decisionData) return;
+
+                    const decisionId = String(decisionData.documentId || decisionData.id || '');
+                    if (!decisionId) return;
+
+                    const schedule: any[] = Array.isArray(assignment.schedule) ? assignment.schedule : [];
+                    const validDates = schedule
+                        .map((row: any) => row.date)
+                        .filter((date: any) => !!date)
+                        .sort();
+
+                    if (validDates.length > 0) {
+                        firstTeachingDateMap.set(decisionId, validDates[0]);
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn('Không thể fetch dữ liệu phân công giảng dạy:', e);
+        }
+
         const wb = XLSX.utils.book_new();
         const wsData = filteredData.map((d, index) => ({
             "STT": index + 1,
@@ -151,6 +180,10 @@ const StatisticsView: React.FC = () => {
             "Tên Lớp": d.className,
             "Khóa": d.trainingCourse,
             "Ngày Ký": d.signedDate ? formatDate(d.signedDate) : '',
+            "Ngày PCGD Đầu Tiên": (() => {
+                const rawDate = firstTeachingDateMap.get(d.id);
+                return rawDate ? formatDate(rawDate) : '';
+            })(),
             "Sĩ Số": d.studentCount,
             "Trạng Thái": d.status === 'Completed' ? 'Đã tốt nghiệp' : 'Đang đào tạo',
             "Năm": d.year,

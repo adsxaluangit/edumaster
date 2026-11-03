@@ -190,7 +190,13 @@ const StudentsView: React.FC<StudentsViewProps> = ({ prefilledStudent, onClearPr
       } as any);
       setStudentPhoto(prefilledStudent.photo || null);
       // Store source documents to copy after save
-      setPrefilledStudentDocs(prefilledStudent.documents || []);
+      const docs = prefilledStudent.documents || [];
+      setPrefilledStudentDocs(docs);
+      
+      const front = docs.find((d: any) => d.name === 'CCCD Mặt trước')?.url || null;
+      const back = docs.find((d: any) => d.name === 'CCCD Mặt sau')?.url || null;
+      setPrefillDocs({ front, back });
+
       setEditingId(null);
       setIsFormOpen(true);
       if (onClearPrefill) onClearPrefill();
