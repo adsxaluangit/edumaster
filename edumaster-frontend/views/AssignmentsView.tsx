@@ -11,6 +11,7 @@ interface DetailedAssignmentRow {
   teacherId: string;
   teacherName: string;
   notes: string;
+  isAutoFilled?: boolean; // true = auto-assigned by algorithm; false/undefined = manually set
 }
 
 const AssignmentsView: React.FC = () => {
@@ -186,8 +187,11 @@ const AssignmentsView: React.FC = () => {
       console.warn("Failed to fetch existing assignments", e);
     }
 
-    // Fallback: If no assignment found OR forceReset is true, generate new
-    console.log("Generating auto-schedule for:", decision.className);
+    // ────────────────────────────────────────────────────────────────
+    // Manual-first mode:
+    //   forceReset=false (default) → generate EMPTY rows (no auto-fill)
+    //   forceReset=true  ("Tải lại CTĐT" button) → run full auto-schedule
+    // ────────────────────────────────────────────────────────────────
 
     let classSubjects: any[] = [];
 
@@ -228,8 +232,37 @@ const AssignmentsView: React.FC = () => {
         shift: 'Sáng',
         teacherId: '',
         teacherName: '',
-        notes: ''
+        notes: '',
+        isAutoFilled: false
       }]);
+      return;
+    }
+
+    // ── MANUAL MODE (default): generate empty rows, no teacher assignment ──
+    if (!forceReset) {
+      const defaultDate = startDate || new Date().toISOString().split('T')[0];
+      const emptyRows: DetailedAssignmentRow[] = [];
+      classSubjects.forEach((subRef: any) => {
+        const subId = String(subRef.documentId || subRef.id);
+        const sub = subjects.find((s: any) => String(s.id) === subId || String(s.documentId) === subId) || subRef;
+        const subName = sub.attributes?.name || sub.name || 'Môn học';
+        const totalHours = sub.attributes?.total_hours || sub.total_hours || sub.totalHours || 5;
+        const sessions = Math.ceil(totalHours / 5);
+        for (let i = 0; i < sessions; i++) {
+          emptyRows.push({
+            subjectId: subId,
+            subjectName: subName,
+            date: defaultDate,
+            shift: 'Sáng',
+            teacherId: '',
+            teacherName: '',
+            notes: '',
+            isAutoFilled: false
+          });
+        }
+      });
+      setAssignmentRows(emptyRows);
+      console.log('[Manual mode] Generated', emptyRows.length, 'empty rows');
       return;
     }
 
@@ -491,13 +524,139 @@ const AssignmentsView: React.FC = () => {
   };
 
   const handleResetSchedule = async () => {
-    if (confirm("Bạn có chắc chắn muốn tải lại Chương trình đào tạo và đặt lại lịch học? Dữ liệu hiện tại sẽ bị mất.")) {
-      await loadAssignmentForClass(selectedDecision, true);
+    if (confirm('Bạn có chắc chắn muốn TẢI LẠI Chương trình đào tạo và xếp lịch tự động từ đầu? Toàn bộ phân công hiện tại sẽ bị mất.')) {
+      await loadAssignmentForClass(selectedDecision, true, autoStartDate);
     }
   };
 
-  const handleAutoArrange = async () => {
-    await loadAssignmentForClass(selectedDecision, true, autoStartDate);
+  // Fill teachers ONLY for rows where teacherId is empty — preserve manual entries
+  const handleAutoFill = async () => {
+    const emptyCount = assignmentRows.filter(r => !r.teacherId).length;
+    if (emptyCount === 0) {
+      alert('Tất cả buổi học đã được phân công giáo viên rồi!');
+      return;
+    }
+
+    // Build global occupancy (other assignments)
+    const globalShiftTeacher: Record<string, Record<string, Set<string>>> = {};
+    try {
+      const allAssignments = await fetchCategory(COLLECTIONS.TRAINING_ASSIGNMENTS);
+      (allAssignments || []).forEach((assign: any) => {
+        if (String(assign.id) === String(existingAssignmentId) ||
+            String(assign.documentId) === String(existingAssignmentId)) return;
+        if (assign.schedule && Array.isArray(assign.schedule)) {
+          assign.schedule.forEach((row: any) => {
+            if (row.date && row.shift && row.teacherId) {
+              const d = row.date, s = row.shift, tId = String(row.teacherId);
+              if (!globalShiftTeacher[d]) globalShiftTeacher[d] = {};
+              if (!globalShiftTeacher[d][s]) globalShiftTeacher[d][s] = new Set();
+              globalShiftTeacher[d][s].add(tId);
+            }
+          });
+        }
+      });
+    } catch (e) { console.warn('Global conflict fetch failed', e); }
+
+    // Also include already-assigned rows from THIS schedule (non-empty)
+    const newRows = [...assignmentRows];
+    newRows.forEach(row => {
+      if (row.teacherId && row.date && row.shift) {
+        const d = row.date, s = row.shift, tId = String(row.teacherId);
+        if (!globalShiftTeacher[d]) globalShiftTeacher[d] = {};
+        if (!globalShiftTeacher[d][s]) globalShiftTeacher[d][s] = new Set();
+        globalShiftTeacher[d][s].add(tId);
+      }
+    });
+
+    // Track 1-teacher-per-subject for this course (from existing filled rows)
+    const courseTeacherSubject: Record<string, string> = {};
+    newRows.forEach(row => {
+      if (row.teacherId && row.subjectId) {
+        courseTeacherSubject[String(row.teacherId)] = row.subjectId;
+      }
+    });
+
+    const canTeachSubject = (teacher: any, subId: string): boolean => {
+      const tSubjects = teacher.subjects || teacher.data?.attributes?.subjects?.data || [];
+      return tSubjects.some((ts: any) => String(ts.documentId || ts.id) === subId);
+    };
+
+    const isAvailableForSlot = (tId: string, dateStr: string, shift: string, subId: string): boolean => {
+      // 1 GV = 1 môn per course
+      if (courseTeacherSubject[tId] && courseTeacherSubject[tId] !== subId) return false;
+      // Already in this shift (global)
+      if (globalShiftTeacher[dateStr]?.[shift]?.has(tId)) return false;
+      // Max 2 consecutive sessions per day
+      const dayShifts = new Set<string>();
+      const dayOcc = globalShiftTeacher[dateStr] || {};
+      Object.keys(dayOcc).forEach(s => { if (dayOcc[s].has(tId)) dayShifts.add(s); });
+      if (dayShifts.size >= 2) return false;
+      if (dayShifts.size === 1) {
+        const s = Array.from(dayShifts)[0];
+        const consecutive = (s === 'Sáng' && shift === 'Chiều') ||
+          (s === 'Chiều' && (shift === 'Sáng' || shift === 'Tối')) ||
+          (s === 'Tối' && shift === 'Chiều');
+        if (!consecutive) return false;
+      }
+      return true;
+    };
+
+    let filled = 0;
+    for (let i = 0; i < newRows.length; i++) {
+      const row = newRows[i];
+      if (row.teacherId) continue; // Already assigned — skip
+
+      const qualified = teachers.filter((t: any) => canTeachSubject(t, row.subjectId));
+      const available = qualified.filter((t: any) =>
+        isAvailableForSlot(String(t.id), row.date, row.shift, row.subjectId)
+      );
+
+      // Prefer teacher already assigned to this subject in this course
+      available.sort((a: any, b: any) => {
+        const aStarted = courseTeacherSubject[String(a.id)] === row.subjectId;
+        const bStarted = courseTeacherSubject[String(b.id)] === row.subjectId;
+        return aStarted === bStarted ? 0 : aStarted ? -1 : 1;
+      });
+
+      if (available.length > 0) {
+        const teacher = available[0];
+        const tId = String(teacher.id);
+        newRows[i] = {
+          ...row,
+          teacherId: teacher.id,
+          teacherName: teacher.full_name || teacher.name || '',
+          isAutoFilled: true
+        };
+        // Mark used
+        courseTeacherSubject[tId] = row.subjectId;
+        if (!globalShiftTeacher[row.date]) globalShiftTeacher[row.date] = {};
+        if (!globalShiftTeacher[row.date][row.shift]) globalShiftTeacher[row.date][row.shift] = new Set();
+        globalShiftTeacher[row.date][row.shift].add(tId);
+        filled++;
+      }
+    }
+
+    setAssignmentRows(newRows);
+    const unfilled = newRows.filter(r => !r.teacherId).length;
+    if (unfilled > 0) {
+      alert(`Đã sắp xếp ${filled} buổi. Còn ${unfilled} buổi chưa tìm được giáo viên phù hợp (kiểm tra ngày/ca trùng lịch hoặc GV chưa được phân môn).`);
+    } else {
+      alert(`Đã tự động sắp xếp xong ${filled} buổi!`);
+    }
+  };
+
+  const handleAddRow = () => {
+    const lastRow = assignmentRows[assignmentRows.length - 1];
+    setAssignmentRows([...assignmentRows, {
+      subjectId: '',
+      subjectName: '',
+      date: lastRow?.date || autoStartDate || new Date().toISOString().split('T')[0],
+      shift: 'Sáng',
+      teacherId: '',
+      teacherName: '',
+      notes: '',
+      isAutoFilled: false
+    }]);
   };
 
   const handleSave = async () => {
@@ -632,6 +791,8 @@ const AssignmentsView: React.FC = () => {
     if (field === 'teacherId') {
       const t = teachers.find(tea => String(tea.id) === value);
       if (t) newRows[index].teacherName = t.full_name || t.name;
+      else newRows[index].teacherName = '';
+      newRows[index].isAutoFilled = false; // User manually chose → clear auto flag
     }
 
     setAssignmentRows(newRows);
@@ -1040,10 +1201,13 @@ const AssignmentsView: React.FC = () => {
                 onChange={(e) => setAutoStartDate(e.target.value)}
               />
             </div>
-            <button onClick={handleAutoArrange} className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-[12px] font-semibold flex items-center gap-1.5 transition-colors">
-              <RefreshCw size={13} /> Tự động
+            <button onClick={handleAutoFill} title="Tự động điền GV cho buổi còn trống (giữ phân công thủ công)" className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-[12px] font-semibold flex items-center gap-1.5 transition-colors">
+              <RefreshCw size={13} /> Tự động sắp xếp
             </button>
-            <button onClick={handleResetSchedule} className="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-orange-300 border border-slate-600 rounded-md text-[12px] font-semibold flex items-center gap-1.5 transition-colors">
+            <button onClick={handleAddRow} title="Thêm một buổi học thủ công" className="px-2.5 py-1.5 bg-slate-600 hover:bg-slate-500 text-emerald-300 border border-slate-500 rounded-md text-[12px] font-semibold flex items-center gap-1.5 transition-colors">
+              + Thêm buổi
+            </button>
+            <button onClick={handleResetSchedule} title="Xóa toàn bộ và xếp lịch tự động từ đầu" className="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-orange-300 border border-slate-600 rounded-md text-[12px] font-semibold flex items-center gap-1.5 transition-colors">
               <RefreshCw size={13} /> Tải lại CTĐT
             </button>
             <div className="w-px h-5 bg-slate-600"></div>
@@ -1092,7 +1256,15 @@ const AssignmentsView: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 text-[13px] print:divide-black">
                 {assignmentRows.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-blue-50/40 transition-colors group print:hover:bg-transparent">
+                  <tr key={idx} className={`transition-colors group print:hover:bg-transparent
+                    ${
+                      !row.teacherId
+                        ? 'bg-yellow-50 hover:bg-yellow-100/60'       // empty teacher → yellow
+                        : row.isAutoFilled
+                          ? 'bg-blue-50/40 hover:bg-blue-100/50'      // auto-filled → blue
+                          : 'hover:bg-slate-50'                        // manual → default
+                    }
+                  `}>
                     <td className="px-3 py-2 text-center text-slate-400 font-medium print:text-black border">{idx + 1}</td>
                     <td className="px-3 py-2 border col-subject">
                       <input
