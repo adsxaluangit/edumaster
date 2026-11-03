@@ -487,7 +487,7 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   // This scales to 500k+ students because we only fetch students for one class at a time
   const loadStudentsByClass = async (classDocId: string): Promise<Student[]> => {
     try {
-      const params = `filters[school_class][documentId][$eq]=${classDocId}&filters[is_approved][$eq]=true&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=is_approved&fields[9]=company&fields[10]=phone&fields[11]=address&populate[school_class]=true&pagination[pageSize]=500`;
+      const params = `filters[school_class][documentId][$eq]=${classDocId}&filters[is_approved][$eq]=true&fields[0]=student_code&fields[1]=full_name&fields[2]=first_name&fields[3]=last_name&fields[4]=dob&fields[5]=pob&fields[6]=gender&fields[7]=id_number&fields[8]=is_approved&fields[9]=company&fields[10]=phone&fields[11]=address&populate[school_class]=true&pagination[pageSize]=1000`;
       const data = await fetchCategory(`${COLLECTIONS.STUDENTS}?${params}`);
       if (!data) return [];
       return data.map((d: any) => {
@@ -737,33 +737,54 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
         // LAZY LOAD: fetch only students for this specific class from the API
         // This avoids loading 500k+ students into browser memory
         setLoading(true);
-        loadStudentsByClass(numericClassId).then(classStudents => {
-          // Only include students who are approved AND not already assigned to another opening decision
-          const approvedStudents = classStudents.filter(s => {
-            const isApproved = (s as any).isApproved === true;
-            const isAlreadyAssigned = assignedStudentIds.has(String(s.id)) || assignedStudentIds.has(String((s as any).strapiId));
-            return isApproved && !isAlreadyAssigned;
+
+        // Fetch assigned student IDs from ALL OPENING decisions (excluding the one being edited)
+        fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?filters[type][$eq]=OPENING&populate[students][fields][0]=id`).then(assignedData => {
+          const serverAssignedIds = new Set<string>();
+          if (assignedData) {
+            assignedData.forEach((dec: any) => {
+              // If editing, skip the current decision so its own students remain selectable
+              if (editingId && String(dec.documentId || dec.id) === String(editingId)) return;
+              const studs = dec.students?.data || dec.students || [];
+              studs.forEach((s: any) => {
+                serverAssignedIds.add(String(s.documentId || s.id));
+                if (s.strapiId) serverAssignedIds.add(String(s.strapiId));
+              });
+            });
+          }
+
+          return loadStudentsByClass(numericClassId).then(classStudents => {
+            // Only include students who are approved AND not already assigned to another opening decision
+            const approvedStudents = classStudents.filter(s => {
+              const isApproved = (s as any).isApproved === true;
+              const isAlreadyAssigned = serverAssignedIds.has(String(s.id)) || serverAssignedIds.has(String((s as any).strapiId));
+              const isAlreadyInThisDecision = tempStudents.some(ts => String(ts.id) === String(s.id) || String(ts.id) === String((s as any).strapiId));
+              return isApproved && (!isAlreadyAssigned || isAlreadyInThisDecision);
+            });
+
+            const mappedStudents: DecisionDetail[] = approvedStudents.map((s, idx) => ({
+              id: s.id,
+              stt: idx + 1,
+              fullName: s.fullName,
+              dob: s.dob || '',
+              cardNumber: s.cardNumber || s.idNumber || '',
+              studentCode: s.studentCode,
+              years: '',
+              hometown: s.pob || '',
+              address: (s as any).address || '',
+              phone: (s as any).phone || '',
+              notes: '',
+              gender: s.gender || '',
+              documents: s.documents || [],
+              photo: s.photo,
+            }));
+            // Update allStudents so the picker table can show them
+            setAllStudents(approvedStudents);
+            setTempStudents(mappedStudents);
+            setLoading(false);
           });
-          
-          const mappedStudents: DecisionDetail[] = approvedStudents.map((s, idx) => ({
-            id: s.id,
-            stt: idx + 1,
-            fullName: s.fullName,
-            dob: s.dob || '',
-            cardNumber: s.cardNumber || s.idNumber || '',
-            studentCode: s.studentCode,
-            years: '',
-            hometown: s.pob || '',
-            address: (s as any).address || '',
-            phone: (s as any).phone || '',
-            notes: '',
-            gender: s.gender || '',
-            documents: s.documents || [],
-            photo: s.photo,
-          }));
-          // Update allStudents so the picker table can show them
-          setAllStudents(approvedStudents);
-          setTempStudents(mappedStudents);
+        }).catch(err => {
+          console.error('Failed to load assigned students for class selection:', err);
           setLoading(false);
         });
       }
@@ -1001,8 +1022,15 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
 
   const handleAddStudentsToTemp = () => {
     const studentsToAdd = allStudents.filter(s => selectedStudentsToAdd.has(s.id));
-    const existingIds = new Set(tempStudents.map(ts => ts.id));
-    const newDetails = studentsToAdd.filter(s => !existingIds.has(s.id)).map((s, idx) => ({
+    // Prevent duplicates using 3-way ID comparison (handles documentId vs numeric format differences)
+    const newDetails = studentsToAdd.filter(s => {
+      const alreadyExists = tempStudents.some(ts =>
+        String(ts.id) === String(s.id) ||
+        String(ts.id) === String((s as any).strapiId) ||
+        String((ts as any).strapiId) === String((s as any).strapiId)
+      );
+      return !alreadyExists;
+    }).map((s, idx) => ({
       id: s.id,
       stt: tempStudents.length + idx + 1,
       fullName: s.fullName,
@@ -1408,34 +1436,127 @@ const DecisionsView: React.FC<DecisionsViewProps> = ({ mode, currentUser }) => {
   };
 
   const handleOpenAddStudentModal = async () => {
-    if (formData.classId) {
+    console.log('[AddStudentModal] viewType:', viewType, '| classId:', formData.classId, '| tempStudents:', tempStudents.length);
+    if (viewType === 'RECOGNITION') {
       setLoading(true);
-      const assignedData = await fetchCategory(`${COLLECTIONS.CLASS_DECISIONS}?filters[type][$eq]=OPENING&populate[students][fields][0]=id`);
-      const serverAssignedIds = new Set<string>();
-      if (assignedData) {
-        assignedData.forEach((d: any) => {
-          const studs = d.students?.data || d.students || [];
-          studs.forEach((s: any) => {
-            serverAssignedIds.add(String(s.documentId || s.id));
-            if (s.strapiId) serverAssignedIds.add(String(s.strapiId));
-          });
-        });
-      }
+      try {
+        let classStudents: Student[] = [];
 
-      loadStudentsByClass(formData.classId).then(classStudents => {
-        // filter out unapproved AND currently assigned students to OTHER opening decisions
-        const approvedStudents = classStudents.filter(s => {
+        // Helper: fetch all approved students directly
+        const fetchAllApproved = async (): Promise<Student[]> => {
+          console.log('[AddStudentModal] fetchAllApproved: fetching all approved students...');
+          const allData = await fetchCategory(
+            `${COLLECTIONS.STUDENTS}?filters[is_approved][$eq]=true&populate[school_class]=true&pagination[pageSize]=500`
+          );
+          console.log('[AddStudentModal] fetchAllApproved raw result count:', allData?.length, '| sample:', allData?.[0]);
+          if (!allData) return [];
+          return allData.map((d: any) => {
+            const classData = d.school_class?.data || d.school_class;
+            return {
+              id: String(d.documentId || d.id),
+              strapiId: d.strapiId || d.id,
+              stt: 0,
+              studentCode: d.student_code || '',
+              fullName: d.full_name || '',
+              firstName: d.first_name || '',
+              lastName: d.last_name || '',
+              dob: d.dob || '',
+              pob: d.pob || '',
+              address: d.address || '',
+              gender: d.gender || '',
+              idNumber: d.id_number || '',
+              cardNumber: '',
+              group: classData?.attributes?.name || classData?.name || '',
+              className: classData?.attributes?.name || classData?.name || '',
+              classCode: classData?.attributes?.code || classData?.code || '',
+              classId: String(classData?.documentId || classData?.id || ''),
+              isApproved: d.is_approved === true || String(d.is_approved).toLowerCase() === 'true',
+              documents: [],
+              photo: null
+            } as Student;
+          });
+        };
+
+        if (formData.classId) {
+          classStudents = await loadStudentsByClass(formData.classId);
+          console.log('[AddStudentModal] loadStudentsByClass result:', classStudents.length, 'for classId:', formData.classId);
+          if (classStudents.length === 0) {
+            classStudents = await fetchAllApproved();
+          }
+        } else {
+          classStudents = await fetchAllApproved();
+        }
+
+        console.log('[AddStudentModal] classStudents total:', classStudents.length);
+
+        const filteredStudents = classStudents.filter(s => {
           const isApproved = (s as any).isApproved === true;
-          const isAlreadyAssigned = serverAssignedIds.has(String(s.id)) || serverAssignedIds.has(String((s as any).strapiId));
-          const isAlreadyInThisDecision = tempStudents.some(ts => String(ts.id) === String(s.id) || String(ts.id) === String((s as any).strapiId));
-          return isApproved && (!isAlreadyAssigned || isAlreadyInThisDecision);
+          const isAlreadyInThisDecision = tempStudents.some(
+            ts => String(ts.id) === String(s.id) || String(ts.id) === String((s as any).strapiId)
+          );
+          return isApproved && !isAlreadyInThisDecision;
         });
-        setAllStudents(approvedStudents);
+
+        console.log('[AddStudentModal] filteredStudents (after removing tempStudents):', filteredStudents.length);
+        console.log('[AddStudentModal] tempStudents IDs:', tempStudents.map(ts => ts.id));
+
+        setAllStudents(filteredStudents);
         setLoading(false);
         setIsAddStudentModalOpen(true);
-      });
+      } catch (err) {
+        console.error('[AddStudentModal] ERROR:', err);
+        setLoading(false);
+        setIsAddStudentModalOpen(true);
+      }
     } else {
-      setIsAddStudentModalOpen(true);
+      // OPENING decision — "Thêm thủ công" manual add.
+      // Use students/unassigned endpoint (same as Student Management form) filtered by:
+      //   - school_class name (= formData.className)
+      //   - is_approved = true
+      // This ensures only approved students who are not yet in any decision are shown.
+      if (formData.classId) {
+        setLoading(true);
+        try {
+          const className = encodeURIComponent(formData.className || '');
+          const url = `${COLLECTIONS.STUDENTS}/unassigned?filters[school_class][name][$eq]=${className}&filters[is_approved][$eq]=true&pagination[pageSize]=1000`;
+          const data = await fetchCategory(url);
+          console.log('[AddStudentModal] OPENING unassigned students for class:', data?.length, 'class:', formData.className);
+          const classStudents: Student[] = (data || []).map((d: any) => {
+            const classData = d.school_class?.data || d.school_class;
+            return {
+              id: String(d.documentId || d.id),
+              strapiId: d.strapiId || d.id,
+              stt: 0,
+              studentCode: d.student_code || '',
+              fullName: d.full_name || '',
+              firstName: d.first_name || '',
+              lastName: d.last_name || '',
+              dob: d.dob || '',
+              pob: d.pob || '',
+              address: d.address || '',
+              gender: d.gender || '',
+              idNumber: d.id_number || '',
+              cardNumber: '',
+              group: classData?.name || classData?.attributes?.name || '',
+              className: classData?.name || classData?.attributes?.name || '',
+              classCode: classData?.code || classData?.attributes?.code || '',
+              classId: String(classData?.documentId || classData?.id || ''),
+              isApproved: d.is_approved === true || String(d.is_approved).toLowerCase() === 'true',
+              documents: [],
+              photo: null
+            } as Student;
+          });
+          setAllStudents(classStudents);
+          setLoading(false);
+          setIsAddStudentModalOpen(true);
+        } catch (err) {
+          console.error('[AddStudentModal] OPENING error:', err);
+          setLoading(false);
+          setIsAddStudentModalOpen(true);
+        }
+      } else {
+        setIsAddStudentModalOpen(true);
+      }
     }
   };
 
@@ -3807,19 +3928,13 @@ có ảnh</span>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {allStudents.filter(s => {
-                  const isAlreadyAssigned = tempStudents.some(ts => String(ts.id) === String(s.id));
-                  if (isAlreadyAssigned) return false;
-
-                  const matchSearch = s.fullName.toLowerCase().includes(searchStudent.toLowerCase()) ||
-                    s.studentCode.toLowerCase().includes(searchStudent.toLowerCase());
-                    
-                  const matchClass = viewType === 'OPENING'
-                    ? (
-                        (s as any).classId === formData.classId &&
-                        (s as any).isApproved === true
-                      )
-                    : true;
-                  return matchSearch && matchClass;
+                  // Show ALL approved students of the class — no exclusion by tempStudents
+                  // Duplicate prevention happens in handleAddStudentsToTemp
+                  const matchSearch = !searchStudent ||
+                    s.fullName.toLowerCase().includes(searchStudent.toLowerCase()) ||
+                    s.studentCode.toLowerCase().includes(searchStudent.toLowerCase()) ||
+                    ((s as any).idNumber || '').toLowerCase().includes(searchStudent.toLowerCase());
+                  return matchSearch;
                 }).map(s => (
                   <tr key={s.id} onClick={() => toggleStudentSelection(s.id)} className={`cursor-pointer hover:bg-blue-50 transition-colors ${selectedStudentsToAdd.has(s.id) ? 'bg-blue-50' : ''}`}>
                     <td className="p-3 text-center" onClick={e => e.stopPropagation()}>

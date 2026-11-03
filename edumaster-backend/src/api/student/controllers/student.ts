@@ -322,6 +322,13 @@ export default factories.createCoreController('api::student.student', ({ strapi 
              .join('classes as cls', 'cls.id', 'sc_lnk.school_class_id')
              .where('cls.name', className);
         }
+
+        // Handle is_approved filter: filters[is_approved][$eq]=true
+        if (anyFilters['is_approved'] && anyFilters['is_approved']['$eq'] !== undefined) {
+           const approvedVal = anyFilters['is_approved']['$eq'];
+           const isApproved = approvedVal === true || approvedVal === 'true' || approvedVal === '1';
+           baseQuery = baseQuery.where('students.is_approved', isApproved);
+        }
       }
 
       const studentIdsRecords = await baseQuery.clone()
