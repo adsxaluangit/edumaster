@@ -115,25 +115,106 @@ const AssignmentsView: React.FC = () => {
     }
   };
 
+  // Normalize any teacher id (numeric strapiId or string documentId) to canonical teacher.id
+  const normalizeTeacherId = (rawId: any): string => {
+    if (!rawId) return '';
+    const s = String(rawId);
+    const found = teachers.find(
+      (t: any) => String(t.id) === s || String(t.documentId) === s || String(t.strapiId) === s
+    );
+    return found ? String(found.id) : s;
+  };
+
+  // Check if two subject references refer to the same subject
+  const isSameSubject = (subIdA: string, subNameA: string, subIdB: string, subNameB: string): boolean => {
+    const idA = String(subIdA || '').trim();
+    const idB = String(subIdB || '').trim();
+    if (idA && idA !== 'temp' && idB && idB !== 'temp') {
+      if (idA === idB) return true;
+      // Also check if one is numeric id and one is documentId of the same subject
+      const subObj = subjects.find(
+        (s: any) => String(s.id) === idA || String(s.documentId) === idA || String(s.strapiId) === idA
+      );
+      if (subObj && (String(subObj.id) === idB || String(subObj.documentId) === idB || String(subObj.strapiId) === idB)) {
+        return true;
+      }
+      return false;
+    }
+    const nameA = String(subNameA || '').trim().toLowerCase();
+    const nameB = String(subNameB || '').trim().toLowerCase();
+    return !!nameA && nameA === nameB;
+  };
+
+  // Check if a teacher is qualified to teach a given subject
+  const checkTeacherQualified = (teacher: any, subId: string, subName?: string): boolean => {
+    const tSubjects = teacher.subjects || teacher.data?.attributes?.subjects?.data || [];
+    const cleanId = String(subId || '').trim();
+    const cleanName = String(subName || '').trim().toLowerCase();
+
+    if (cleanId && cleanId !== 'temp') {
+      // Find canonical subject if available
+      const targetSub = subjects.find(
+        (s: any) => String(s.id) === cleanId || String(s.documentId) === cleanId || String(s.strapiId) === cleanId
+      );
+      return tSubjects.some((ts: any) => {
+        const tsDocId = String(ts.documentId || ts.id || '');
+        const tsNumId = String(ts.strapiId || ts.id || '');
+        if (tsDocId === cleanId || tsNumId === cleanId) return true;
+        if (targetSub) {
+          if (tsDocId === String(targetSub.id) || tsDocId === String(targetSub.documentId) || tsNumId === String(targetSub.strapiId)) {
+            return true;
+          }
+        }
+        if (cleanName) {
+          const tsName = String(ts.name || ts.attributes?.name || '').trim().toLowerCase();
+          if (tsName && tsName === cleanName) return true;
+        }
+        return false;
+      });
+    }
+
+    if (cleanName) {
+      // Check if this name matches any known subject in system
+      const knownSubject = subjects.some(
+        (s: any) => String(s.name || s.attributes?.name || '').trim().toLowerCase() === cleanName
+      );
+      if (!knownSubject) return true; // Custom free-text subject → allow any available teacher
+      return tSubjects.some(
+        (ts: any) => String(ts.name || ts.attributes?.name || '').trim().toLowerCase() === cleanName
+      );
+    }
+
+    // Empty subject row (+ Thêm buổi not yet typed) → allow available teachers
+    return true;
+  };
+
   const refreshGlobalOccupancy = async (excludeAssignmentId?: string | null) => {
     try {
-      const allAssignments = await fetchCategory(COLLECTIONS.TRAINING_ASSIGNMENTS);
+      const allAssignments = await fetchCategoryAll(COLLECTIONS.TRAINING_ASSIGNMENTS);
       const occupancy: Record<string, Record<string, Record<string, boolean>>> = {};
 
       (allAssignments || []).forEach((assign: any) => {
         const assignId = String(assign.documentId || assign.id);
-        if (excludeAssignmentId && assignId === String(excludeAssignmentId)) return;
+        const assignNumId = String(assign.strapiId || assign.id);
+        if (
+          excludeAssignmentId &&
+          (assignId === String(excludeAssignmentId) || assignNumId === String(excludeAssignmentId))
+        ) {
+          return;
+        }
 
         if (assign.schedule && Array.isArray(assign.schedule)) {
           assign.schedule.forEach((row: any) => {
             if (row.date && row.shift && row.teacherId) {
               const d = row.date;
               const s = row.shift;
-              const tId = String(row.teacherId);
+              const tId = normalizeTeacherId(row.teacherId);
 
               if (!occupancy[d]) occupancy[d] = {};
               if (!occupancy[d][s]) occupancy[d][s] = {};
               occupancy[d][s][tId] = true;
+              // Also store raw teacherId for safety
+              occupancy[d][s][String(row.teacherId)] = true;
             }
           });
         }
@@ -147,41 +228,58 @@ const AssignmentsView: React.FC = () => {
   };
 
   const openAssignmentForm = async (decision: any) => {
-    setSelectedClassId(decision.strapiId || decision.id);
+    const decisionDocId = String(decision.documentId || decision.id);
+    setSelectedClassId(decisionDocId);
     setSelectedDecision(decision);
     setCurrentClassName(decision.className);
     setCurrentDecisionNumber(decision.decisionNumber);
 
-    // Load assignment data
-    await loadAssignmentForClass(decision);
-    await refreshGlobalOccupancy(null);
+    const defaultStart = decision.signedDate
+      ? new Date(decision.signedDate).toISOString().split('T')[0]
+      : new Date().toISOString().split('T')[0];
+    setAutoStartDate(defaultStart);
+
+    // Load assignment data (also refreshes globalOccupancy with proper exclusion)
+    await loadAssignmentForClass(decision, false, defaultStart);
 
     setIsFormOpen(true);
   };
 
   const loadAssignmentForClass = async (decision: any, forceReset: boolean = false, startDate?: string) => {
-    const decisionId = decision.id;
+    const decisionDocId = String(decision.documentId || decision.id);
+    let currentAssignId: string | null = existingAssignmentId;
 
-    // Try multiple keys for finding assignments (Strapi v4 filter syntax)
-    // We want to find an assignment where decision.id === decisionId
     try {
-      setExistingAssignmentId(null);
+      if (!forceReset) {
+        setExistingAssignmentId(null);
+        currentAssignId = null;
+      }
 
       // Fetch existing assignments for this decision
-      // Filter: filters[decision][documentId][$eq]=decisionId
-      const query = `${COLLECTIONS.TRAINING_ASSIGNMENTS}?filters[decision][documentId][$eq]=${decisionId}`;
+      const query = `${COLLECTIONS.TRAINING_ASSIGNMENTS}?filters[decision][documentId][$eq]=${decisionDocId}`;
       const existingAssignments = await fetchCategory(query);
 
       if (existingAssignments && existingAssignments.length > 0) {
         const assignment = existingAssignments[0];
-        if (assignment.schedule) {
-          setAssignmentRows(assignment.schedule);
-          const assignId = assignment.documentId || assignment.id;
-          setExistingAssignmentId(assignId);
-          await refreshGlobalOccupancy(assignId);
+        const assignId = String(assignment.documentId || assignment.id);
+        setExistingAssignmentId(assignId);
+        currentAssignId = assignId;
+        await refreshGlobalOccupancy(assignId);
 
-          if (!forceReset) return; // If loaded and not forced reset, we are done
+        if (assignment.schedule && Array.isArray(assignment.schedule) && assignment.schedule.length > 0 && !forceReset) {
+          // Normalize teacherIds to canonical teacher.id so dropdowns bind cleanly
+          const normalizedSchedule = assignment.schedule.map((r: any) => ({
+            ...r,
+            teacherId: normalizeTeacherId(r.teacherId),
+          }));
+          setAssignmentRows(normalizedSchedule);
+          // Set autoStartDate to earliest date in saved schedule if available
+          const dates = normalizedSchedule.map((r: any) => r.date).filter(Boolean).sort();
+          if (dates[0]) setAutoStartDate(dates[0]);
+          return;
         }
+      } else {
+        await refreshGlobalOccupancy(null);
       }
     } catch (e) {
       console.warn("Failed to fetch existing assignments", e);
@@ -189,26 +287,21 @@ const AssignmentsView: React.FC = () => {
 
     // ────────────────────────────────────────────────────────────────
     // Manual-first mode:
-    //   forceReset=false (default) → generate EMPTY rows (no auto-fill)
+    //   forceReset=false (default) → generate EMPTY rows spread across Morning/Afternoon
     //   forceReset=true  ("Tải lại CTĐT" button) → run full auto-schedule
     // ────────────────────────────────────────────────────────────────
 
     let classSubjects: any[] = [];
 
-    // Initial check from decision object
     if (Array.isArray(decision.subjects)) {
       classSubjects = decision.subjects;
     } else if (decision.subjects?.data) {
       classSubjects = decision.subjects.data;
     }
 
-    // If empty, force fetch again from API to be absolutely sure
     if (classSubjects.length === 0 && decision.classId) {
       try {
-        // Try fetching class directly
         const classDetail = await fetchItem(COLLECTIONS.CLASSES, decision.classId);
-        console.log("Forced fetch class details:", classDetail);
-
         if (classDetail) {
           if (Array.isArray(classDetail.subjects)) {
             classSubjects = classDetail.subjects;
@@ -223,12 +316,13 @@ const AssignmentsView: React.FC = () => {
       }
     }
 
-    // If classSubjects is empty after all attempts, show placeholder
+    const baseStartDateStr = startDate || autoStartDate || new Date().toISOString().split('T')[0];
+
     if (classSubjects.length === 0) {
       setAssignmentRows([{
         subjectId: 'temp',
         subjectName: 'Chưa có môn học trong chương trình đào tạo',
-        date: new Date().toISOString().split('T')[0],
+        date: baseStartDateStr,
         shift: 'Sáng',
         teacherId: '',
         teacherName: '',
@@ -238,49 +332,59 @@ const AssignmentsView: React.FC = () => {
       return;
     }
 
-    // ── MANUAL MODE (default): generate empty rows, no teacher assignment ──
+    const getYMD = (d: Date) => d.toISOString().split('T')[0];
+
+    // ── MANUAL MODE (default): generate empty rows spread sequentially across Sáng -> Chiều ──
     if (!forceReset) {
-      const defaultDate = startDate || new Date().toISOString().split('T')[0];
       const emptyRows: DetailedAssignmentRow[] = [];
+      const baseDate = new Date(baseStartDateStr);
+      let slotIndex = 0; // 0 = Day 0 Sáng, 1 = Day 0 Chiều, 2 = Day 1 Sáng, ...
+
       classSubjects.forEach((subRef: any) => {
         const subId = String(subRef.documentId || subRef.id);
-        const sub = subjects.find((s: any) => String(s.id) === subId || String(s.documentId) === subId) || subRef;
+        const sub = subjects.find((s: any) => String(s.id) === subId || String(s.documentId) === subId || String(s.strapiId) === subId) || subRef;
         const subName = sub.attributes?.name || sub.name || 'Môn học';
         const totalHours = sub.attributes?.total_hours || sub.total_hours || sub.totalHours || 5;
         const sessions = Math.ceil(totalHours / 5);
+
         for (let i = 0; i < sessions; i++) {
+          const dayOffset = Math.floor(slotIndex / 2);
+          const shift: 'Sáng' | 'Chiều' = slotIndex % 2 === 0 ? 'Sáng' : 'Chiều';
+          const rowDate = new Date(baseDate);
+          rowDate.setDate(rowDate.getDate() + dayOffset);
+
           emptyRows.push({
             subjectId: subId,
             subjectName: subName,
-            date: defaultDate,
-            shift: 'Sáng',
+            date: getYMD(rowDate),
+            shift,
             teacherId: '',
             teacherName: '',
             notes: '',
             isAutoFilled: false
           });
+          slotIndex++;
         }
       });
       setAssignmentRows(emptyRows);
-      console.log('[Manual mode] Generated', emptyRows.length, 'empty rows');
       return;
     }
 
-    // --- AUTO SCHEDULING ALGORITHM ---
+    // --- AUTO SCHEDULING ALGORITHM ("Tải lại CTĐT") ---
     // Rules:
-    // 1. Each teacher teaches only 1 subject per course
-    // 2. Priority: Morning -> Afternoon -> Evening (only when no teacher available)
-    // 3. No duplicate day: if teacher is teaching on a date (any shift), skip entire day
-    // 4. Manual dropdown: hide teachers busy on that date+shift
+    // 1. Teacher must be qualified for the subject (checkTeacherQualified)
+    // 2. 1 Teacher = max 1 Subject per course (courseTeacherSubject)
+    // 3. 1 Subject = 1 Teacher throughout the course (subjectTeacherMap)
+    // 4. Class can only study 1 session per Date+Shift
+    // 5. Teacher max 2 consecutive shifts/day across all classes (Sáng+Chiều or Chiều+Tối; NO Sáng+Tối)
+    // 6. Shift priority: Morning -> Afternoon -> Evening (fallback only)
 
-    let initialRows: DetailedAssignmentRow[] = [];
-
-    // 1. Prepare session queue
-    const sessionQueue: { subId: string, subName: string }[] = [];
+    const initialRows: DetailedAssignmentRow[] = [];
+    const sessionQueue: { subId: string; subName: string }[] = [];
 
     classSubjects.forEach((subRef: any) => {
       const subId = String(subRef.documentId || subRef.id);
-      const sub = subjects.find(s => String(s.id) === subId || String(s.documentId) === subId) || subRef;
+      const sub = subjects.find(s => String(s.id) === subId || String(s.documentId) === subId || String(s.strapiId) === subId) || subRef;
       const subName = sub.attributes?.name || sub.name || "Môn học";
       const totalHours = sub.attributes?.total_hours || sub.total_hours || sub.totalHours || 5;
 
@@ -294,40 +398,40 @@ const AssignmentsView: React.FC = () => {
       setAssignmentRows([{
         subjectId: 'temp',
         subjectName: 'Chưa có môn học trong chương trình đào tạo',
-        date: new Date().toISOString().split('T')[0],
+        date: baseStartDateStr,
         shift: 'Sáng',
         teacherId: '',
         teacherName: '',
-        notes: ''
+        notes: '',
+        isAutoFilled: false
       }]);
       return;
     }
 
-    // 2. Schedule sessions
-    let currentDate = startDate ? new Date(startDate) : new Date();
+    const currentDate = new Date(baseStartDateStr);
     const MAX_DAYS = 365;
-    const getYMD = (d: Date) => d.toISOString().split('T')[0];
 
-    // --- Build global occupancy from ALL OTHER existing assignments ---
-    // globalDateTeacher[date] = Set<teacherId> - teacher is busy on this entire date
-    const globalDateTeacher: Record<string, Set<string>> = {};
-    // globalShiftTeacher[date][shift] = Set<teacherId>
+    // Build global occupancy from ALL OTHER existing assignments
     const globalShiftTeacher: Record<string, Record<string, Set<string>>> = {};
 
     try {
-      const allAssignments = await fetchCategory(COLLECTIONS.TRAINING_ASSIGNMENTS);
+      const allAssignments = await fetchCategoryAll(COLLECTIONS.TRAINING_ASSIGNMENTS);
       (allAssignments || []).forEach((assign: any) => {
-        if (String(assign.id) === String(existingAssignmentId) || String(assign.documentId) === String(existingAssignmentId)) return;
+        const assignId = String(assign.documentId || assign.id);
+        const assignNumId = String(assign.strapiId || assign.id);
+        if (
+          currentAssignId &&
+          (assignId === String(currentAssignId) || assignNumId === String(currentAssignId))
+        ) {
+          return;
+        }
 
         if (assign.schedule && Array.isArray(assign.schedule)) {
           assign.schedule.forEach((row: any) => {
             if (row.date && row.shift && row.teacherId) {
               const d = row.date;
               const s = row.shift;
-              const tId = String(row.teacherId);
-
-              if (!globalDateTeacher[d]) globalDateTeacher[d] = new Set();
-              globalDateTeacher[d].add(tId);
+              const tId = normalizeTeacherId(row.teacherId);
 
               if (!globalShiftTeacher[d]) globalShiftTeacher[d] = {};
               if (!globalShiftTeacher[d][s]) globalShiftTeacher[d][s] = new Set();
@@ -340,26 +444,36 @@ const AssignmentsView: React.FC = () => {
       console.warn("Global conflict detection failed", e);
     }
 
+    // Update globalOccupancy state for dropdown filtering (only other classes)
+    const newOccupancy: Record<string, Record<string, Record<string, boolean>>> = {};
+    for (const d of Object.keys(globalShiftTeacher)) {
+      if (!newOccupancy[d]) newOccupancy[d] = {};
+      for (const s of Object.keys(globalShiftTeacher[d])) {
+        if (!newOccupancy[d][s]) newOccupancy[d][s] = {};
+        globalShiftTeacher[d][s].forEach(tId => {
+          newOccupancy[d][s][tId] = true;
+        });
+      }
+    }
+    setGlobalOccupancy(newOccupancy);
+
     // Track within THIS course
-    const courseTeacherSubject: Record<string, string> = {}; // teacherId -> subjectId (1 GV = 1 Môn)
-    const courseDateTeacher: Record<string, Set<string>> = {}; // date -> Set<teacherId>
+    const courseTeacherSubject: Record<string, string> = {}; // teacherId -> subId (1 GV = 1 Môn)
+    const subjectTeacherMap: Record<string, string> = {};    // subId -> teacherId (1 Môn = 1 GV xuyên suốt)
+    const classShiftUsed: Record<string, Set<string>> = {};  // date -> Set<shift>
 
-    // Helper: can teacher teach this subject?
-    const canTeachSubject = (teacher: any, subId: string): boolean => {
-      const tSubjects = teacher.subjects || teacher.data?.attributes?.subjects?.data || [];
-      return tSubjects.some((ts: any) => String(ts.documentId || ts.id) === subId);
-    };
-
-    // Helper: is teacher available on this date for this subject?
     const isAvailable = (tId: string, dateStr: string, shift: 'Sáng' | 'Chiều' | 'Tối', subId: string): boolean => {
       // Rule 1: 1 GV = 1 Môn per course
       if (courseTeacherSubject[tId] && courseTeacherSubject[tId] !== subId) return false;
-      
-      // Rule: Busy if already teaching THIS shift (global or local)
+
+      // Rule 2: 1 Môn = 1 GV throughout the course
+      if (subjectTeacherMap[subId] && subjectTeacherMap[subId] !== tId) return false;
+
+      // Rule 3: Busy if already teaching THIS shift (global or local)
       if (globalShiftTeacher[dateStr]?.[shift]?.has(tId)) return false;
 
-      // Rule: Busy if already has 2 or more sessions on this date
-      const existingShifts = [];
+      // Rule 4: Max 2 sessions per day & must be consecutive
+      const existingShifts: string[] = [];
       const dayOccupancy = globalShiftTeacher[dateStr] || {};
       if (dayOccupancy['Sáng']?.has(tId)) existingShifts.push('Sáng');
       if (dayOccupancy['Chiều']?.has(tId)) existingShifts.push('Chiều');
@@ -367,51 +481,41 @@ const AssignmentsView: React.FC = () => {
 
       if (existingShifts.length >= 2) return false;
 
-      // Rule: If has 1 session, it MUST be consecutive to the current shift
       if (existingShifts.length === 1) {
         const s = existingShifts[0];
-        const isConsecutive = (
+        const isConsecutive =
           (s === 'Sáng' && shift === 'Chiều') ||
           (s === 'Chiều' && (shift === 'Sáng' || shift === 'Tối')) ||
-          (s === 'Tối' && shift === 'Chiều')
-        );
+          (s === 'Tối' && shift === 'Chiều');
         if (!isConsecutive) return false;
       }
 
       return true;
     };
 
-    // Helper: find best teacher for subject on date
-    const findBestTeacher = (subId: string, dateStr: string, shift: 'Sáng' | 'Chiều' | 'Tối'): any | null => {
-      const qualified = teachers.filter((t: any) => canTeachSubject(t, subId));
+    const findBestTeacher = (subId: string, subName: string, dateStr: string, shift: 'Sáng' | 'Chiều' | 'Tối'): any | null => {
+      // If this subject already has a dedicated teacher in this course, only check that teacher
+      if (subjectTeacherMap[subId]) {
+        const lockedTId = subjectTeacherMap[subId];
+        const lockedTeacher = teachers.find((t: any) => String(t.id) === lockedTId);
+        if (!lockedTeacher) return null;
+        return isAvailable(lockedTId, dateStr, shift, subId) ? lockedTeacher : null;
+      }
+
+      const qualified = teachers.filter((t: any) => checkTeacherQualified(t, subId, subName));
       if (qualified.length === 0) return null;
 
       const available = qualified.filter((t: any) => isAvailable(String(t.id), dateStr, shift, subId));
       if (available.length === 0) return null;
 
-      // Sort: prefer continuity (same teacher for same subject)
-      available.sort((a: any, b: any) => {
-        const aStarted = courseTeacherSubject[String(a.id)] === subId;
-        const bStarted = courseTeacherSubject[String(b.id)] === subId;
-        if (aStarted && !bStarted) return -1;
-        if (!aStarted && bStarted) return 1;
-        const aAssigned = !!courseTeacherSubject[String(a.id)];
-        const bAssigned = !!courseTeacherSubject[String(b.id)];
-        if (!aAssigned && bAssigned) return -1;
-        if (aAssigned && !bAssigned) return 1;
-        return 0;
-      });
-
       return available[0];
     };
 
-    // Mark teacher as used
     const markUsed = (tId: string, dateStr: string, shift: string, subId: string) => {
       courseTeacherSubject[tId] = subId;
-      if (!courseDateTeacher[dateStr]) courseDateTeacher[dateStr] = new Set();
-      courseDateTeacher[dateStr].add(tId);
-      if (!globalDateTeacher[dateStr]) globalDateTeacher[dateStr] = new Set();
-      globalDateTeacher[dateStr].add(tId);
+      subjectTeacherMap[subId] = tId;
+      if (!classShiftUsed[dateStr]) classShiftUsed[dateStr] = new Set();
+      classShiftUsed[dateStr].add(shift);
       if (!globalShiftTeacher[dateStr]) globalShiftTeacher[dateStr] = {};
       if (!globalShiftTeacher[dateStr][shift]) globalShiftTeacher[dateStr][shift] = new Set();
       globalShiftTeacher[dateStr][shift].add(tId);
@@ -432,12 +536,15 @@ const AssignmentsView: React.FC = () => {
 
       for (const shift of priorityShifts) {
         if (pass1Queue.length === 0) break;
+        if (classShiftUsed[dateStr]?.has(shift)) continue;
 
-        const candidateIndex = pass1Queue.findIndex(session => findBestTeacher(session.subId, dateStr, shift) !== null);
+        const candidateIndex = pass1Queue.findIndex(
+          session => findBestTeacher(session.subId, session.subName, dateStr, shift) !== null
+        );
 
         if (candidateIndex !== -1) {
           const session = pass1Queue[candidateIndex];
-          const teacher = findBestTeacher(session.subId, dateStr, shift);
+          const teacher = findBestTeacher(session.subId, session.subName, dateStr, shift);
 
           pass1Queue.splice(candidateIndex, 1);
 
@@ -450,9 +557,10 @@ const AssignmentsView: React.FC = () => {
             subjectName: session.subName,
             date: dateStr,
             shift: shift,
-            teacherId: teacher ? teacher.id : '',
+            teacherId: teacher ? String(teacher.id) : '',
             teacherName: teacher ? (teacher.full_name || teacher.name) : '',
-            notes: ''
+            notes: '',
+            isAutoFilled: !!teacher
           });
         }
       }
@@ -463,7 +571,6 @@ const AssignmentsView: React.FC = () => {
 
     // --- PASS 2: Evening fallback ---
     if (remainingForEvening.length > 0) {
-      console.log("Evening fallback for", remainingForEvening.length, "sessions");
       dayOffset = 0;
       while (remainingForEvening.length > 0 && dayOffset < MAX_DAYS) {
         const date = new Date(currentDate);
@@ -471,31 +578,65 @@ const AssignmentsView: React.FC = () => {
         const dateStr = getYMD(date);
         const shift: 'Sáng' | 'Chiều' | 'Tối' = 'Tối';
 
-        const candidateIndex = remainingForEvening.findIndex(session => findBestTeacher(session.subId, dateStr, shift) !== null);
+        if (!classShiftUsed[dateStr]?.has(shift)) {
+          const candidateIndex = remainingForEvening.findIndex(
+            session => findBestTeacher(session.subId, session.subName, dateStr, shift) !== null
+          );
 
-        if (candidateIndex !== -1) {
-          const session = remainingForEvening[candidateIndex];
-          const teacher = findBestTeacher(session.subId, dateStr, shift);
+          if (candidateIndex !== -1) {
+            const session = remainingForEvening[candidateIndex];
+            const teacher = findBestTeacher(session.subId, session.subName, dateStr, shift);
 
-          remainingForEvening.splice(candidateIndex, 1);
+            remainingForEvening.splice(candidateIndex, 1);
 
-          if (teacher) {
-            markUsed(String(teacher.id), dateStr, shift, session.subId);
+            if (teacher) {
+              markUsed(String(teacher.id), dateStr, shift, session.subId);
+            }
+
+            initialRows.push({
+              subjectId: session.subId,
+              subjectName: session.subName,
+              date: dateStr,
+              shift: 'Tối',
+              teacherId: teacher ? String(teacher.id) : '',
+              teacherName: teacher ? (teacher.full_name || teacher.name) : '',
+              notes: 'Ca tối (không còn GV rảnh sáng/chiều)',
+              isAutoFilled: !!teacher
+            });
           }
-
-          initialRows.push({
-            subjectId: session.subId,
-            subjectName: session.subName,
-            date: dateStr,
-            shift: 'Tối',
-            teacherId: teacher ? teacher.id : '',
-            teacherName: teacher ? (teacher.full_name || teacher.name) : '',
-            notes: 'Ca tối (không còn GV rảnh sáng/chiều)'
-          });
-        } else {
-          dayOffset++;
         }
+        dayOffset++;
       }
+    }
+
+    // Any still-unscheduled sessions (e.g. subject has no qualified teachers in DB): append as unassigned rows
+    if (remainingForEvening.length > 0) {
+      let fallbackSlot = 0;
+      remainingForEvening.forEach((session) => {
+        while (true) {
+          const dOff = Math.floor(fallbackSlot / 2);
+          const sh: 'Sáng' | 'Chiều' = fallbackSlot % 2 === 0 ? 'Sáng' : 'Chiều';
+          const d = new Date(currentDate);
+          d.setDate(d.getDate() + dOff);
+          const dStr = getYMD(d);
+          fallbackSlot++;
+          if (!classShiftUsed[dStr]?.has(sh)) {
+            if (!classShiftUsed[dStr]) classShiftUsed[dStr] = new Set();
+            classShiftUsed[dStr].add(sh);
+            initialRows.push({
+              subjectId: session.subId,
+              subjectName: session.subName,
+              date: dStr,
+              shift: sh,
+              teacherId: '',
+              teacherName: '',
+              notes: 'Chưa có GV phụ trách môn này',
+              isAutoFilled: false
+            });
+            break;
+          }
+        }
+      });
     }
 
     // Sort by date then shift
@@ -506,19 +647,6 @@ const AssignmentsView: React.FC = () => {
       const shiftOrder: Record<string, number> = { 'Sáng': 0, 'Chiều': 1, 'Tối': 2 };
       return (shiftOrder[a.shift] || 0) - (shiftOrder[b.shift] || 0);
     });
-
-    // Update globalOccupancy state for dropdown filtering
-    const newOccupancy: Record<string, Record<string, Record<string, boolean>>> = {};
-    for (const d of Object.keys(globalShiftTeacher)) {
-      if (!newOccupancy[d]) newOccupancy[d] = {};
-      for (const s of Object.keys(globalShiftTeacher[d])) {
-        if (!newOccupancy[d][s]) newOccupancy[d][s] = {};
-        globalShiftTeacher[d][s].forEach(tId => {
-          newOccupancy[d][s][tId] = true;
-        });
-      }
-    }
-    setGlobalOccupancy(newOccupancy);
 
     setAssignmentRows(initialRows);
   };
@@ -540,14 +668,20 @@ const AssignmentsView: React.FC = () => {
     // Build global occupancy (other assignments)
     const globalShiftTeacher: Record<string, Record<string, Set<string>>> = {};
     try {
-      const allAssignments = await fetchCategory(COLLECTIONS.TRAINING_ASSIGNMENTS);
+      const allAssignments = await fetchCategoryAll(COLLECTIONS.TRAINING_ASSIGNMENTS);
       (allAssignments || []).forEach((assign: any) => {
-        if (String(assign.id) === String(existingAssignmentId) ||
-            String(assign.documentId) === String(existingAssignmentId)) return;
+        const assignId = String(assign.documentId || assign.id);
+        const assignNumId = String(assign.strapiId || assign.id);
+        if (
+          existingAssignmentId &&
+          (assignId === String(existingAssignmentId) || assignNumId === String(existingAssignmentId))
+        ) {
+          return;
+        }
         if (assign.schedule && Array.isArray(assign.schedule)) {
           assign.schedule.forEach((row: any) => {
             if (row.date && row.shift && row.teacherId) {
-              const d = row.date, s = row.shift, tId = String(row.teacherId);
+              const d = row.date, s = row.shift, tId = normalizeTeacherId(row.teacherId);
               if (!globalShiftTeacher[d]) globalShiftTeacher[d] = {};
               if (!globalShiftTeacher[d][s]) globalShiftTeacher[d][s] = new Set();
               globalShiftTeacher[d][s].add(tId);
@@ -557,43 +691,52 @@ const AssignmentsView: React.FC = () => {
       });
     } catch (e) { console.warn('Global conflict fetch failed', e); }
 
-    // Also include already-assigned rows from THIS schedule (non-empty)
     const newRows = [...assignmentRows];
+    const getSubKey = (r: DetailedAssignmentRow) =>
+      r.subjectId && r.subjectId !== 'temp' ? String(r.subjectId) : String(r.subjectName || '').trim().toLowerCase();
+
+    // Track within THIS course from already-assigned rows
+    const courseTeacherSubject: Record<string, string> = {}; // teacherId -> subKey (1 GV = 1 Môn)
+    const subjectTeacherMap: Record<string, string> = {};    // subKey -> teacherId (1 Môn = 1 GV xuyên suốt)
+    const classShiftUsed: Record<string, Set<string>> = {};  // date -> Set<shift> occupied by this class
+
     newRows.forEach(row => {
       if (row.teacherId && row.date && row.shift) {
-        const d = row.date, s = row.shift, tId = String(row.teacherId);
+        const d = row.date, s = row.shift, tId = normalizeTeacherId(row.teacherId);
+        const subKey = getSubKey(row);
+
         if (!globalShiftTeacher[d]) globalShiftTeacher[d] = {};
         if (!globalShiftTeacher[d][s]) globalShiftTeacher[d][s] = new Set();
         globalShiftTeacher[d][s].add(tId);
+
+        if (!classShiftUsed[d]) classShiftUsed[d] = new Set();
+        classShiftUsed[d].add(s);
+
+        if (subKey) {
+          courseTeacherSubject[tId] = subKey;
+          if (!subjectTeacherMap[subKey]) {
+            subjectTeacherMap[subKey] = tId;
+          }
+        }
       }
     });
 
-    // Track 1-teacher-per-subject for this course (from existing filled rows)
-    const courseTeacherSubject: Record<string, string> = {};
-    newRows.forEach(row => {
-      if (row.teacherId && row.subjectId) {
-        courseTeacherSubject[String(row.teacherId)] = row.subjectId;
-      }
-    });
-
-    const canTeachSubject = (teacher: any, subId: string): boolean => {
-      const tSubjects = teacher.subjects || teacher.data?.attributes?.subjects?.data || [];
-      return tSubjects.some((ts: any) => String(ts.documentId || ts.id) === subId);
-    };
-
-    const isAvailableForSlot = (tId: string, dateStr: string, shift: string, subId: string): boolean => {
-      // 1 GV = 1 môn per course
-      if (courseTeacherSubject[tId] && courseTeacherSubject[tId] !== subId) return false;
-      // Already in this shift (global)
+    const isAvailableForSlot = (tId: string, dateStr: string, shift: string, subKey: string): boolean => {
+      // Rule 1: 1 GV = 1 môn per course
+      if (courseTeacherSubject[tId] && courseTeacherSubject[tId] !== subKey) return false;
+      // Rule 2: 1 Môn = 1 GV throughout the course
+      if (subjectTeacherMap[subKey] && subjectTeacherMap[subKey] !== tId) return false;
+      // Rule 3: Already in this shift (global + local)
       if (globalShiftTeacher[dateStr]?.[shift]?.has(tId)) return false;
-      // Max 2 consecutive sessions per day
+      // Rule 4: Max 2 consecutive sessions per day
       const dayShifts = new Set<string>();
       const dayOcc = globalShiftTeacher[dateStr] || {};
       Object.keys(dayOcc).forEach(s => { if (dayOcc[s].has(tId)) dayShifts.add(s); });
       if (dayShifts.size >= 2) return false;
       if (dayShifts.size === 1) {
         const s = Array.from(dayShifts)[0];
-        const consecutive = (s === 'Sáng' && shift === 'Chiều') ||
+        const consecutive =
+          (s === 'Sáng' && shift === 'Chiều') ||
           (s === 'Chiều' && (shift === 'Sáng' || shift === 'Tối')) ||
           (s === 'Tối' && shift === 'Chiều');
         if (!consecutive) return false;
@@ -601,45 +744,121 @@ const AssignmentsView: React.FC = () => {
       return true;
     };
 
+    const pickTeacherForSlot = (row: DetailedAssignmentRow, dateStr: string, shift: string): any | null => {
+      const subKey = getSubKey(row);
+      if (subjectTeacherMap[subKey]) {
+        const lockedTId = subjectTeacherMap[subKey];
+        const lockedTeacher = teachers.find((t: any) => String(t.id) === lockedTId);
+        if (!lockedTeacher) return null;
+        return isAvailableForSlot(lockedTId, dateStr, shift, subKey) ? lockedTeacher : null;
+      }
+
+      const qualified = teachers.filter((t: any) => checkTeacherQualified(t, row.subjectId, row.subjectName));
+      const available = qualified.filter((t: any) =>
+        isAvailableForSlot(String(t.id), dateStr, shift, subKey)
+      );
+      return available.length > 0 ? available[0] : null;
+    };
+
+    const markSlotUsed = (tId: string, dateStr: string, shift: string, subKey: string) => {
+      if (subKey) {
+        courseTeacherSubject[tId] = subKey;
+        if (!subjectTeacherMap[subKey]) subjectTeacherMap[subKey] = tId;
+      }
+      if (!classShiftUsed[dateStr]) classShiftUsed[dateStr] = new Set();
+      classShiftUsed[dateStr].add(shift);
+      if (!globalShiftTeacher[dateStr]) globalShiftTeacher[dateStr] = {};
+      if (!globalShiftTeacher[dateStr][shift]) globalShiftTeacher[dateStr][shift] = new Set();
+      globalShiftTeacher[dateStr][shift].add(tId);
+    };
+
+    const getYMD = (d: Date) => d.toISOString().split('T')[0];
+    const baseSearchDate = new Date(autoStartDate || new Date().toISOString().split('T')[0]);
+    const MAX_DAYS = 365;
+
     let filled = 0;
     for (let i = 0; i < newRows.length; i++) {
       const row = newRows[i];
-      if (row.teacherId) continue; // Already assigned — skip
+      if (row.teacherId) continue; // Already assigned — preserve manual entry
 
-      const qualified = teachers.filter((t: any) => canTeachSubject(t, row.subjectId));
-      const available = qualified.filter((t: any) =>
-        isAvailableForSlot(String(t.id), row.date, row.shift, row.subjectId)
-      );
+      const subKey = getSubKey(row);
+      let chosenDate = row.date;
+      let chosenShift: 'Sáng' | 'Chiều' | 'Tối' = row.shift;
+      let chosenTeacher: any | null = null;
 
-      // Prefer teacher already assigned to this subject in this course
-      available.sort((a: any, b: any) => {
-        const aStarted = courseTeacherSubject[String(a.id)] === row.subjectId;
-        const bStarted = courseTeacherSubject[String(b.id)] === row.subjectId;
-        return aStarted === bStarted ? 0 : aStarted ? -1 : 1;
-      });
+      // Step 1: Try keeping the row's current (date, shift) if the class isn't already using that slot
+      if (chosenDate && chosenShift && !classShiftUsed[chosenDate]?.has(chosenShift)) {
+        chosenTeacher = pickTeacherForSlot(row, chosenDate, chosenShift);
+      }
 
-      if (available.length > 0) {
-        const teacher = available[0];
-        const tId = String(teacher.id);
+      // Step 2: If current slot is occupied or teacher is busy, search forward in Sáng -> Chiều
+      if (!chosenTeacher) {
+        const startFrom = row.date && row.date > autoStartDate ? new Date(row.date) : new Date(baseSearchDate);
+        for (let dOff = 0; dOff < MAX_DAYS && !chosenTeacher; dOff++) {
+          const d = new Date(startFrom);
+          d.setDate(d.getDate() + dOff);
+          const dStr = getYMD(d);
+          for (const sh of ['Sáng', 'Chiều'] as ('Sáng' | 'Chiều')[]) {
+            if (classShiftUsed[dStr]?.has(sh)) continue;
+            const cand = pickTeacherForSlot(row, dStr, sh);
+            if (cand) {
+              chosenDate = dStr;
+              chosenShift = sh;
+              chosenTeacher = cand;
+              break;
+            }
+          }
+        }
+      }
+
+      // Step 3: Evening fallback if Sáng/Chiều couldn't fit
+      if (!chosenTeacher) {
+        const startFrom = row.date && row.date > autoStartDate ? new Date(row.date) : new Date(baseSearchDate);
+        for (let dOff = 0; dOff < MAX_DAYS && !chosenTeacher; dOff++) {
+          const d = new Date(startFrom);
+          d.setDate(d.getDate() + dOff);
+          const dStr = getYMD(d);
+          const sh: 'Tối' = 'Tối';
+          if (classShiftUsed[dStr]?.has(sh)) continue;
+          const cand = pickTeacherForSlot(row, dStr, sh);
+          if (cand) {
+            chosenDate = dStr;
+            chosenShift = sh;
+            chosenTeacher = cand;
+            break;
+          }
+        }
+      }
+
+      if (chosenTeacher) {
+        const tId = String(chosenTeacher.id);
         newRows[i] = {
           ...row,
-          teacherId: teacher.id,
-          teacherName: teacher.full_name || teacher.name || '',
+          date: chosenDate,
+          shift: chosenShift,
+          teacherId: tId,
+          teacherName: chosenTeacher.full_name || chosenTeacher.name || '',
+          notes: chosenShift === 'Tối' && !row.notes ? 'Ca tối (không còn GV rảnh sáng/chiều)' : row.notes,
           isAutoFilled: true
         };
-        // Mark used
-        courseTeacherSubject[tId] = row.subjectId;
-        if (!globalShiftTeacher[row.date]) globalShiftTeacher[row.date] = {};
-        if (!globalShiftTeacher[row.date][row.shift]) globalShiftTeacher[row.date][row.shift] = new Set();
-        globalShiftTeacher[row.date][row.shift].add(tId);
+        markSlotUsed(tId, chosenDate, chosenShift, subKey);
         filled++;
       }
     }
 
+    // Sort chronologically by date then shift
+    newRows.sort((a, b) => {
+      const da = new Date(a.date).getTime();
+      const db = new Date(b.date).getTime();
+      if (da !== db) return da - db;
+      const shiftOrder: Record<string, number> = { 'Sáng': 0, 'Chiều': 1, 'Tối': 2 };
+      return (shiftOrder[a.shift] || 0) - (shiftOrder[b.shift] || 0);
+    });
+
     setAssignmentRows(newRows);
     const unfilled = newRows.filter(r => !r.teacherId).length;
     if (unfilled > 0) {
-      alert(`Đã sắp xếp ${filled} buổi. Còn ${unfilled} buổi chưa tìm được giáo viên phù hợp (kiểm tra ngày/ca trùng lịch hoặc GV chưa được phân môn).`);
+      alert(`Đã sắp xếp ${filled} buổi. Còn ${unfilled} buổi chưa tìm được giáo viên phù hợp (kiểm tra môn học đã được gán giáo viên phụ trách trong danh mục Giáo viên chưa).`);
     } else {
       alert(`Đã tự động sắp xếp xong ${filled} buổi!`);
     }
@@ -647,11 +866,27 @@ const AssignmentsView: React.FC = () => {
 
   const handleAddRow = () => {
     const lastRow = assignmentRows[assignmentRows.length - 1];
+    let nextDate = lastRow?.date || autoStartDate || new Date().toISOString().split('T')[0];
+    let nextShift: 'Sáng' | 'Chiều' | 'Tối' = 'Sáng';
+
+    if (lastRow) {
+      if (lastRow.shift === 'Sáng') {
+        nextShift = 'Chiều';
+      } else {
+        const d = new Date(lastRow.date);
+        if (!isNaN(d.getTime())) {
+          d.setDate(d.getDate() + 1);
+          nextDate = d.toISOString().split('T')[0];
+        }
+        nextShift = 'Sáng';
+      }
+    }
+
     setAssignmentRows([...assignmentRows, {
       subjectId: '',
       subjectName: '',
-      date: lastRow?.date || autoStartDate || new Date().toISOString().split('T')[0],
-      shift: 'Sáng',
+      date: nextDate,
+      shift: nextShift,
       teacherId: '',
       teacherName: '',
       notes: '',
@@ -659,22 +894,115 @@ const AssignmentsView: React.FC = () => {
     }]);
   };
 
+  // Validate a single row against all training assignment rules
+  const getRowConflicts = (row: DetailedAssignmentRow, idx: number): string[] => {
+    const conflicts: string[] = [];
+
+    // 1. Class slot collision (same date + shift within this class)
+    if (row.date && row.shift) {
+      const sameClassSlot = assignmentRows.some(
+        (r, i) => i !== idx && r.date === row.date && r.shift === row.shift
+      );
+      if (sameClassSlot) {
+        conflicts.push('Trùng ngày & buổi học trong cùng lớp');
+      }
+    }
+
+    if (!row.teacherId) return conflicts;
+    const tId = normalizeTeacherId(row.teacherId);
+    const teacherObj = teachers.find((t: any) => String(t.id) === tId);
+
+    // 2. Qualification check
+    if (teacherObj && !checkTeacherQualified(teacherObj, row.subjectId, row.subjectName)) {
+      conflicts.push('GV chưa được phân công chuyên môn dạy môn này');
+    }
+
+    // 3. Global shift collision (busy in another class)
+    if (row.date && row.shift && globalOccupancy[row.date]?.[row.shift]?.[tId]) {
+      conflicts.push('GV bị trùng lịch dạy ở lớp khác');
+    }
+
+    // 4. 1 GV = max 1 Subject per course
+    const teachesAnotherSubject = assignmentRows.some(
+      (r, i) =>
+        i !== idx &&
+        r.teacherId &&
+        normalizeTeacherId(r.teacherId) === tId &&
+        !isSameSubject(r.subjectId, r.subjectName, row.subjectId, row.subjectName)
+    );
+    if (teachesAnotherSubject) {
+      conflicts.push('1 GV chỉ được dạy tối đa 1 môn trong khóa');
+    }
+
+    // 5. 1 Subject = 1 GV throughout the course
+    const sameSubjectDiffTeacher = assignmentRows.some(
+      (r, i) =>
+        i !== idx &&
+        r.teacherId &&
+        isSameSubject(r.subjectId, r.subjectName, row.subjectId, row.subjectName) &&
+        normalizeTeacherId(r.teacherId) !== tId
+    );
+    if (sameSubjectDiffTeacher) {
+      conflicts.push('Môn học đang có nhiều hơn 1 GV phụ trách');
+    }
+
+    // 6. Max 2 consecutive shifts per day (global + local)
+    if (row.date) {
+      const allShiftsOnDate = new Set<string>();
+      if (row.shift) allShiftsOnDate.add(row.shift);
+      if (globalOccupancy[row.date]) {
+        Object.keys(globalOccupancy[row.date]).forEach(s => {
+          if (globalOccupancy[row.date][s][tId]) allShiftsOnDate.add(s);
+        });
+      }
+      assignmentRows.forEach((r, i) => {
+        if (i !== idx && r.date === row.date && r.teacherId && normalizeTeacherId(r.teacherId) === tId) {
+          allShiftsOnDate.add(r.shift);
+        }
+      });
+
+      if (allShiftsOnDate.size > 2) {
+        conflicts.push('GV dạy quá 2 ca trong cùng 1 ngày');
+      } else if (allShiftsOnDate.size === 2 && allShiftsOnDate.has('Sáng') && allShiftsOnDate.has('Tối')) {
+        conflicts.push('2 ca dạy trong ngày không liên tiếp (Sáng - Tối)');
+      }
+    }
+
+    return conflicts;
+  };
+
   const handleSave = async () => {
     if (!selectedClassId) return;
 
-    // Prepare load
-    // We store the array of rows in 'schedule' JSON field and link 'decision'
+    // Check for any rule violations before saving
+    const conflictMessages: string[] = [];
+    assignmentRows.forEach((row, idx) => {
+      const rowConflicts = getRowConflicts(row, idx);
+      if (rowConflicts.length > 0) {
+        conflictMessages.push(`- Buổi #${idx + 1} (${row.subjectName || 'Chưa rõ môn'} - ${formatDateVN(row.date)} ${row.shift}): ${rowConflicts.join(', ')}`);
+      }
+    });
+
+    if (conflictMessages.length > 0) {
+      const proceed = confirm(
+        `Phát hiện ${conflictMessages.length} buổi học có xung đột nguyên tắc phân công:\n\n` +
+        conflictMessages.slice(0, 8).join('\n') +
+        (conflictMessages.length > 8 ? `\n... và ${conflictMessages.length - 8} buổi khác.` : '') +
+        `\n\nBạn vẫn muốn lưu bảng phân công này?`
+      );
+      if (!proceed) return;
+    }
+
+    // Prepare payload
     const payload = {
       schedule: assignmentRows,
-      decision: selectedClassId // Link to Decision ID
+      decision: selectedClassId // Link to Decision documentId
     };
 
     try {
       if (existingAssignmentId) {
-        // Update
         await updateCategory(COLLECTIONS.TRAINING_ASSIGNMENTS, existingAssignmentId, payload);
       } else {
-        // Create
         const newAssignment = await createCategory(COLLECTIONS.TRAINING_ASSIGNMENTS, payload);
         if (newAssignment && (newAssignment.id || newAssignment.documentId)) {
           setExistingAssignmentId(newAssignment.documentId || newAssignment.id);
@@ -691,7 +1019,7 @@ const AssignmentsView: React.FC = () => {
   const handleExportAllAssignments = async () => {
     try {
       // 1. Fetch all training assignments for status verification
-      const allAssignments = await fetchCategory(COLLECTIONS.TRAINING_ASSIGNMENTS);
+      const allAssignments = await fetchCategoryAll(COLLECTIONS.TRAINING_ASSIGNMENTS);
 
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Bảng Tổng Hợp Huấn Luyện');
@@ -788,10 +1116,26 @@ const AssignmentsView: React.FC = () => {
     const newRows = [...assignmentRows];
     newRows[index] = { ...newRows[index], [field]: value };
 
+    if (field === 'subjectName') {
+      const cleanName = String(value || '').trim().toLowerCase();
+      const matchedSub = subjects.find(
+        (s: any) => String(s.name || s.attributes?.name || '').trim().toLowerCase() === cleanName
+      );
+      if (matchedSub) {
+        newRows[index].subjectId = String(matchedSub.documentId || matchedSub.id);
+      } else {
+        newRows[index].subjectId = '';
+      }
+    }
+
     if (field === 'teacherId') {
-      const t = teachers.find(tea => String(tea.id) === value);
-      if (t) newRows[index].teacherName = t.full_name || t.name;
-      else newRows[index].teacherName = '';
+      const t = teachers.find(tea => String(tea.id) === value || String(tea.strapiId) === value);
+      if (t) {
+        newRows[index].teacherId = String(t.id);
+        newRows[index].teacherName = t.full_name || t.name;
+      } else {
+        newRows[index].teacherName = '';
+      }
       newRows[index].isAutoFilled = false; // User manually chose → clear auto flag
     }
 
@@ -1241,6 +1585,12 @@ const AssignmentsView: React.FC = () => {
 
         {/* Table Content */}
         <div className="flex-1 overflow-auto p-4 bg-slate-50 print:bg-white print:p-0 print:overflow-visible print:h-auto">
+          <datalist id="assignment-subjects-datalist">
+            {subjects.map((s: any) => {
+              const sName = s.name || s.attributes?.name || '';
+              return sName ? <option key={s.id} value={sName} /> : null;
+            })}
+          </datalist>
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden print:shadow-none print:border-none">
             <table className="w-full text-sm text-left border-collapse">
               <thead className="bg-slate-800 text-slate-300 uppercase font-semibold text-[10px] tracking-wider sticky top-0 z-10 print:bg-white print:text-black">
@@ -1249,30 +1599,37 @@ const AssignmentsView: React.FC = () => {
                   <th className="px-3 py-2.5 print:bg-white border w-auto">Chương trình đào tạo</th>
                   <th className="px-3 py-2.5 w-28 print:bg-white border text-center">Ngày học</th>
                   <th className="px-3 py-2.5 w-20 print:bg-white border text-center">Buổi</th>
-                  <th className="px-3 py-2.5 w-44 print:bg-white border">Giáo viên</th>
+                  <th className="px-3 py-2.5 w-48 print:bg-white border">Giáo viên</th>
                   <th className="px-3 py-2.5 print:bg-white border col-notes no-print">Ghi chú</th>
                   <th className="px-3 py-2.5 w-8 print:bg-white border no-print"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-[13px] print:divide-black">
-                {assignmentRows.map((row, idx) => (
+                {assignmentRows.map((row, idx) => {
+                  const rowConflicts = getRowConflicts(row, idx);
+                  const hasConflict = rowConflicts.length > 0;
+
+                  return (
                   <tr key={idx} className={`transition-colors group print:hover:bg-transparent
                     ${
-                      !row.teacherId
-                        ? 'bg-yellow-50 hover:bg-yellow-100/60'       // empty teacher → yellow
-                        : row.isAutoFilled
-                          ? 'bg-blue-50/40 hover:bg-blue-100/50'      // auto-filled → blue
-                          : 'hover:bg-slate-50'                        // manual → default
+                      hasConflict
+                        ? 'bg-red-50/80 hover:bg-red-100/70'          // rule conflict → red
+                        : !row.teacherId
+                          ? 'bg-yellow-50 hover:bg-yellow-100/60'     // empty teacher → yellow
+                          : row.isAutoFilled
+                            ? 'bg-blue-50/40 hover:bg-blue-100/50'    // auto-filled → blue
+                            : 'hover:bg-slate-50'                      // manual → default
                     }
                   `}>
                     <td className="px-3 py-2 text-center text-slate-400 font-medium print:text-black border">{idx + 1}</td>
                     <td className="px-3 py-2 border col-subject">
                       <input
                         type="text"
+                        list="assignment-subjects-datalist"
                         className="w-full bg-transparent border-none focus:ring-0 font-semibold text-slate-700 p-0 print:hidden text-[13px]"
                         value={row.subjectName}
                         onChange={(e) => updateRow(idx, 'subjectName', e.target.value)}
-                        placeholder="Nhập tên môn..."
+                        placeholder="Nhập hoặc chọn môn học..."
                       />
                       <div className="hidden print:block whitespace-pre-wrap">{row.subjectName}</div>
                     </td>
@@ -1300,28 +1657,43 @@ const AssignmentsView: React.FC = () => {
                     </td>
                     <td className="px-3 py-2 border">
                       <select
-                        className="w-full border border-slate-200 rounded px-1.5 py-1 text-slate-600 focus:border-blue-500 focus:outline-none text-[12px] print:hidden"
-                        value={row.teacherId}
+                        className={`w-full border rounded px-1.5 py-1 text-slate-600 focus:border-blue-500 focus:outline-none text-[12px] print:hidden ${
+                          hasConflict ? 'border-red-400 bg-white text-red-700 font-semibold' : 'border-slate-200'
+                        }`}
+                        value={normalizeTeacherId(row.teacherId)}
                         onChange={(e) => updateRow(idx, 'teacherId', e.target.value)}
                       >
                         <option value="">-- Chọn GV --</option>
                         {teachers.map(t => {
                           const tId = String(t.id);
-                          const isCurrentlySelected = String(row.teacherId) === tId;
+                          const isCurrentlySelected = normalizeTeacherId(row.teacherId) === tId;
 
-                          // Rule: Only show teachers qualified for this subject
-                          const tSubjects = t.subjects || t.data?.attributes?.subjects?.data || [];
-                          const isQualified = tSubjects.some((ts: any) => String(ts.documentId || ts.id) === String(row.subjectId));
+                          // Rule 1: Only show teachers qualified for this subject
+                          const isQualified = checkTeacherQualified(t, row.subjectId, row.subjectName);
 
-                          // Rule: Busy if already teaching THIS shift (global)
+                          // Rule 2: Busy if already teaching THIS shift (global or local)
                           const isBusyGlobalShift = globalOccupancy[row.date]?.[row.shift]?.[tId];
-
-                          // Rule: Already assigned to a different subject in THIS course (1 GV = 1 Môn)
-                          const assignedDiffSubject = assignmentRows.some(r =>
-                            String(r.teacherId) === tId && r.teacherId !== '' && String(r.subjectId) !== String(row.subjectId)
+                          const isBusyLocalShift = assignmentRows.some(
+                            (r, i) => i !== idx && r.date === row.date && r.shift === row.shift && normalizeTeacherId(r.teacherId) === tId
                           );
 
-                          // Rule: Max 2 consecutive sessions per day
+                          // Rule 3: Already assigned to a different subject in THIS course (1 GV = 1 Môn)
+                          const assignedDiffSubject = assignmentRows.some((r, i) =>
+                            i !== idx &&
+                            r.teacherId !== '' &&
+                            normalizeTeacherId(r.teacherId) === tId &&
+                            !isSameSubject(r.subjectId, r.subjectName, row.subjectId, row.subjectName)
+                          );
+
+                          // Rule 4: Subject already assigned to another teacher in THIS course (1 Môn = 1 GV xuyên suốt)
+                          const assignedDiffTeacherSameSubject = assignmentRows.some((r, i) =>
+                            i !== idx &&
+                            r.teacherId !== '' &&
+                            isSameSubject(r.subjectId, r.subjectName, row.subjectId, row.subjectName) &&
+                            normalizeTeacherId(r.teacherId) !== tId
+                          );
+
+                          // Rule 5: Max 2 consecutive sessions per day
                           const dayAssignmentCount = (() => {
                             const shifts = new Set<string>();
                             // Count global
@@ -1332,7 +1704,7 @@ const AssignmentsView: React.FC = () => {
                             }
                             // Count local (not including current row to allow re-selection)
                             assignmentRows.forEach((r, i) => {
-                              if (i !== idx && r.date === row.date && String(r.teacherId) === tId) {
+                              if (i !== idx && r.date === row.date && normalizeTeacherId(r.teacherId) === tId) {
                                 shifts.add(r.shift);
                               }
                             });
@@ -1347,7 +1719,12 @@ const AssignmentsView: React.FC = () => {
                           })();
 
                           // Filter: If fails any rule and not currently selected, hide
-                          if ((!isQualified || isBusyGlobalShift || assignedDiffSubject || exceedMaxSessions || isNotConsecutive) && !isCurrentlySelected) return null;
+                          if (
+                            (!isQualified || isBusyGlobalShift || isBusyLocalShift || assignedDiffSubject || assignedDiffTeacherSameSubject || exceedMaxSessions || isNotConsecutive) &&
+                            !isCurrentlySelected
+                          ) {
+                            return null;
+                          }
 
                           return (
                             <option key={t.id} value={t.id}>
@@ -1356,6 +1733,11 @@ const AssignmentsView: React.FC = () => {
                           );
                         })}
                       </select>
+                      {hasConflict && (
+                        <div className="mt-1 text-[10px] text-red-600 font-medium leading-tight print:hidden">
+                          ⚠ {rowConflicts.join(' • ')}
+                        </div>
+                      )}
                       <span className="hidden print:inline">{row.teacherName}</span>
                     </td>
                     <td className="px-3 py-2 border col-notes no-print">
@@ -1376,7 +1758,8 @@ const AssignmentsView: React.FC = () => {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {assignmentRows.length === 0 && (
                   <tr>
                     <td colSpan={7} className="p-8 text-center text-slate-400 italic border">
